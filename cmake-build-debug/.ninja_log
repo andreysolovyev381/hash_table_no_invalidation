@@ -1,5 +1,0 @@
-# ninja log v5
-10	6970	1716151597931493687	tests/CMakeFiles/aligned_list_tests.dir/main.cpp.o	8c0d07d10554d6a4
-6971	7455	1716151598421120255	tests/aligned_list_tests	3421ac981595858f
-5	4675	1716152203229569528	benchmark/CMakeFiles/aligned_list_benchmark.dir/main.cpp.o	9e4d7dee8240fbf8
-4675	4892	1716152203450969843	benchmark/aligned_list_benchmark	15bf59d9ef8b4f6
