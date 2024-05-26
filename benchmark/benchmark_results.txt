@@ -1,22 +1,22 @@
 /misc/homes/asolovyev/~/hash_table/cmake-build-release-lime-co/benchmark/hash_table_benchmark
-2024-05-26T04:29:04-04:00
+2024-05-26T08:25:19-04:00
 Running /misc/homes/asolovyev/~/hash_table/cmake-build-release-lime-co/benchmark/hash_table_benchmark
-Run on (12 X 3722.88 MHz CPU s)
+Run on (12 X 3719.62 MHz CPU s)
 CPU Caches:
   L1 Data 32 KiB (x12)
   L1 Instruction 32 KiB (x12)
   L2 Unified 256 KiB (x12)
   L3 Unified 12288 KiB (x2)
-Load Average: 3.16, 3.10, 3.03
+Load Average: 3.19, 3.07, 3.01
 ***WARNING*** Library was built as DEBUG. Timings may be affected.
 ------------------------------------------------------------------------------------------------
 Benchmark                                                      Time             CPU   Iterations
 ------------------------------------------------------------------------------------------------
-Insertion std::unordered_set          /min_time:5.000      0.159 us        0.158 us     43200594
-Insertion containers::hash_table::Set /min_time:5.000      0.131 us        0.131 us     48726121
-Access std::unordered_set             /min_time:5.000      0.100 us        0.100 us     70115314
-Access containers::hash_table::Set    /min_time:5.000      0.066 us        0.066 us    105866092
-Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    595622129
-Erase containers::hash_table::Set     /min_time:5.000      0.033 us        0.032 us    211234684
+Insertion std::unordered_set          /min_time:5.000      0.140 us        0.139 us     51874458
+Insertion containers::hash_table::Set /min_time:5.000      0.122 us        0.121 us     56272570
+Access std::unordered_set             /min_time:5.000      0.066 us        0.066 us    106103478
+Access containers::hash_table::Set    /min_time:5.000      0.061 us        0.061 us    114491522
+Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    632791640
+Erase containers::hash_table::Set     /min_time:5.000      0.029 us        0.029 us    233041224
 
 Process finished with exit code 0

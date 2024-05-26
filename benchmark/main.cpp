@@ -25,7 +25,7 @@ auto insertion = [](int value, auto &hash_table){
 
 template <typename HashTable>
 static void Insertion(benchmark::State& state) {
-	HashTable ht;
+	HashTable ht(iter_count);
 	int res {1};
 	for (auto _ : state) {
 		res = insertion(res, ht);
@@ -45,7 +45,7 @@ auto accessTo = [](auto & hash_table){
 
 template <typename HashTable>
 static void Access(benchmark::State& state) {
-	HashTable ht;
+	HashTable ht(iter_count);
 	int res {1};
 	for (int i = 0; i != iter_count; ++i){
 		insertion(res, ht);
@@ -74,7 +74,7 @@ auto eraseFrom = [](auto & hash_table){
 
 template <typename HashTable>
 static void Erase(benchmark::State& state) {
-	HashTable ht;
+	HashTable ht(iter_count);
 	int res {1};
 	for (int i = 0; i != iter_count; ++i){
 		insertion(res, ht);

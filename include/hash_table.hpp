@@ -83,6 +83,7 @@ namespace containers {
 
 				static constexpr std::size_t initial_capacity {20};
 				static constexpr double maxLoadFactor {0.5};
+				static constexpr int maxEmplaceAttempts {5};
 
 			}//!namespace details::const_values
 
@@ -171,8 +172,8 @@ namespace containers {
 
 					Data &data;
 					AccessHelper accessHelper;
-					std::size_t capacity {const_values::initial_capacity};
-					std::size_t sz {0};
+					std::size_t capacity;
+					std::size_t sz;
 
 					Hasher hasher;
 					Equal equal;
@@ -180,6 +181,16 @@ namespace containers {
 
 					explicit Access(Data &data)
 							: data(data)
+							, capacity {const_values::initial_capacity}
+							, sz {0}
+					{
+						accessHelper.resize(capacity);
+					}
+
+					explicit Access(Data &data, std::size_t capacity)
+							: data(data)
+							, capacity {capacity}
+							, sz {0}
 					{
 						accessHelper.resize(capacity);
 					}
@@ -242,8 +253,11 @@ namespace containers {
 							return elemIter->value();
 						}
 						else {
-							rehash();
-							elemIter = getElemIter(key);
+							int attempts {const_values::maxEmplaceAttempts};
+							while (attempts-- && !emplaceable(elemIter)){
+								rehash();
+								elemIter = getElemIter(key);
+							}
 							if (!emplaceable(elemIter)) {
 								throw std::runtime_error("Unable to emplace after rehash, consider reducing const_values::maxLoadFactor");
 							}
@@ -345,6 +359,11 @@ namespace containers {
 				HashTable()
 						: data(pmr::allocator_type{&pmr::resource})
 						, access(data)
+				{}
+
+				HashTable(std::size_t initialCapacity)
+						: data(pmr::allocator_type{&pmr::resource})
+						, access(data, initialCapacity)
 				{}
 
 				virtual ~HashTable() = default;
