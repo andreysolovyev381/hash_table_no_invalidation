@@ -4,74 +4,94 @@
 
 #include <benchmark/benchmark.h>
 
-#include <algorithm>
-#include <list>
+#include "../hash_table.hpp"
 #include <random>
+#include <unordered_set>
+#include <unordered_map>
 
-
-static constexpr std::size_t cache_line_size {64u};
-static constexpr std::size_t arbitrary_alignment {24u};
-static constexpr int iter_count {100'000};
-static constexpr int bound {50'000};
-
+static constexpr int iter_count {1'000'000};
+static constexpr int test_time {5};
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
 static std::uniform_int_distribution<> distrib(1, iter_count);
 
-static void RegularList(benchmark::State& state) {
-	std::list<int> l;
-	std::vector<std::vector<int>> vs;
+auto insertion = [](int value, auto &hash_table){
+	int elem {distrib(gen)};
+	hash_table.insert(elem);
+	value += elem;
+	return value / hash_table.size();
+};
 
-	for (int i = 0; i != iter_count; ++i){
-		vs.emplace_back(std::vector<int> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17});
-		l.push_back(distrib(gen));
-	}
-
+template <typename HashTable>
+static void Insertion(benchmark::State& state) {
+	HashTable ht;
+	int res {1};
 	for (auto _ : state) {
-		auto count = std::count_if(l.begin(), l.end(), [](const auto elem){ return elem > bound; });
-		benchmark::DoNotOptimize(count);
+		res = insertion(res, ht);
+		benchmark::DoNotOptimize(res);
 	}
 }
-BENCHMARK(RegularList)->Name("Regular List")->Unit(benchmark::kMicrosecond)->MinTime(5);
 
-static void PmrList1(benchmark::State& state) {
-	std::pmr::unsynchronized_pool_resource upstream_resource(std::pmr::get_default_resource());
-	memory::AlignedMemoryResource<arbitrary_alignment> aligned_resource(&upstream_resource);
-	using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-	std::pmr::list<int> l(allocator_type{&aligned_resource});
-	std::vector<std::vector<int>> vs;
+BENCHMARK_TEMPLATE(Insertion, std::unordered_set<int>)->Name("Insertion std::unordered_set          ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
+BENCHMARK_TEMPLATE(Insertion, containers::hash_table::Set<int>)->Name("Insertion containers::hash_table::Set ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
 
+
+auto accessTo = [](auto & hash_table){
+	int key {distrib(gen)};
+	auto found = hash_table.find(key);
+	return found == hash_table.end() ?  -1 : *found;
+};
+
+template <typename HashTable>
+static void Access(benchmark::State& state) {
+	HashTable ht;
+	int res {1};
 	for (int i = 0; i != iter_count; ++i){
-		vs.emplace_back(std::vector<int> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17});
-		l.push_back(distrib(gen));
+		insertion(res, ht);
 	}
-
 	for (auto _ : state) {
-		auto count = std::count_if(l.begin(), l.end(), [](const auto elem){ return elem > bound; });
-		benchmark::DoNotOptimize(count);
+		res = accessTo(ht);
+		benchmark::DoNotOptimize(res);
 	}
 }
-BENCHMARK(PmrList1)->Name("Pmr List, using Aligned Memory Resource")->Unit(benchmark::kMicrosecond)->MinTime(5);
+
+BENCHMARK_TEMPLATE(Access, std::unordered_set<int>)->Name("Access std::unordered_set             ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
+BENCHMARK_TEMPLATE(Access, containers::hash_table::Set<int>)->Name("Access containers::hash_table::Set    ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
 
 
-static void PmrList2(benchmark::State& state) {
-	std::pmr::unsynchronized_pool_resource resource(std::pmr::get_default_resource());
-	using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-	std::pmr::list<int> l(allocator_type{&resource});
-	std::vector<std::vector<int>> vs;
-
-	for (int i = 0; i != iter_count; ++i){
-		vs.emplace_back(std::vector<int> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17});
-		l.push_back(distrib(gen));
+auto eraseFrom = [](auto & hash_table){
+	int key {distrib(gen)};
+	auto found = hash_table.find(key);
+	int v;
+	if (found != hash_table.end()) {
+		v = *found;
+		hash_table.erase(found);
 	}
 
+	return found == hash_table.end() ? -1 : v;
+};
+
+template <typename HashTable>
+static void Erase(benchmark::State& state) {
+	HashTable ht;
+	int res {1};
+	for (int i = 0; i != iter_count; ++i){
+		insertion(res, ht);
+	}
 	for (auto _ : state) {
-		auto count = std::count_if(l.begin(), l.end(), [](const auto elem){ return elem > bound; });
-		benchmark::DoNotOptimize(count);
+		res = eraseFrom(ht);
+		benchmark::DoNotOptimize(res);
 	}
 }
-BENCHMARK(PmrList2)->Name("Pmr List, using Standard Memory Resource")->Unit(benchmark::kMicrosecond)->MinTime(5);
+
+BENCHMARK_TEMPLATE(Erase, std::unordered_set<int>)->Name("Erase std::unordered_set              ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
+BENCHMARK_TEMPLATE(Erase, containers::hash_table::Set<int>)->Name("Erase containers::hash_table::Set     ")->Unit(benchmark::kMicrosecond)->MinTime(test_time);
 
 
-BENCHMARK_MAIN();
+int main(int argc, char** argv) {
+	::benchmark::Initialize(&argc, argv);
+	::benchmark::RunSpecifiedBenchmarks();
+	::benchmark::Shutdown();
+	return 0;
+}

@@ -144,10 +144,21 @@ TEST(hash_table_set, iterating_backwards) {
 
 TEST(hash_table_set, no_invalidation) {
 	::containers::hash_table::Set<int> hashTable;
-	auto const* const ptrBefore {hashTable.insert(-1)};
+	auto iterBefore {hashTable.insert(-1)};
 	for (int i = 0; i != 1'000'000; ++i) {
 		hashTable.insert(i);
 	}
-	auto const* const ptrAfter {&*hashTable.find(-1)};
-	ASSERT_EQ(ptrBefore, ptrAfter);
+	auto iterAfter {hashTable.find(-1)};
+	ASSERT_EQ(*iterBefore, *iterAfter);
+}
+
+TEST(hash_table_set, hash_values_collision) {
+	::containers::hash_table::Set<int> hashTable;
+	hashTable.insert(799); //with initial capacity 20 h == 19
+	hashTable.insert(919);//with initial capacity 20 h == 19 -> busy -> (19 + 19) / 20 == 18
+	ASSERT_EQ(hashTable.size(), 2u);
+	hashTable.erase(799); //erases slot 19
+	ASSERT_EQ(hashTable.size(), 1u);
+	hashTable.insert(919); //if no precautions would place it recently freed slot 19
+	ASSERT_EQ(hashTable.size(), 1u);
 }

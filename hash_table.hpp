@@ -10,6 +10,8 @@
 #include <type_traits>
 #include <tuple>
 #include <memory_resource>
+#include <stdexcept>
+#include <optional>
 
 namespace requirements {
 
@@ -67,48 +69,52 @@ namespace containers {
 		using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
 		//	usage example
 		//	std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
-
+#if 0
 		struct AllocatorAwareObject {
+			using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
+			allocator_type alloc;
+
+			allocator_type& get_allocator() {
+				return alloc;
+			}
+
+			explicit AllocatorAwareObject([[maybe_unused]]allocator_type alloc = {})
+			{}
+
+			AllocatorAwareObject(const AllocatorAwareObject&, const allocator_type&)
+			{}
+
+			AllocatorAwareObject(AllocatorAwareObject&&, const allocator_type&)
+			{}
+
+			AllocatorAwareObject& operator=(const AllocatorAwareObject&) = delete;
+
+			AllocatorAwareObject& operator=(AllocatorAwareObject&&) = delete;
 
 		};
-
+#endif
 	}//!namespace details::pmr
 
 	namespace hash_table {
 
 		namespace details {
+
 			namespace const_values {
 
-				static constexpr std::size_t capacity {20};
-				static constexpr std::size_t sz {0};
-				static constexpr double maxFactor {0.3};
+				static constexpr std::size_t initial_capacity {20};
 
 			}//!namespace details::const_values
 
-			template<typename Type1, typename Type2>
-			struct InternalPair {
-				using FirstType = Type1;
-				using SecondType = Type2;
-				FirstType first;
-				SecondType second;
-				InternalPair(FirstType f, SecondType s)
-						: first(std::move(f))
-						, second(std::move(s))
-				{}
-				InternalPair(FirstType f)
-				requires std::default_initializable<SecondType>
-						: first(std::move(f))
-						, second(SecondType{})
-				{}
-			};
+			namespace requirements {
 
-			template <typename MappedType>
-			concept IsMap = requires {
-				std::same_as<MappedType, InternalPair<typename MappedType::FirstType, typename MappedType::SecondType>>;
-			};
+				template<typename MappedType>
+				concept IsMapConcept = std::same_as<MappedType,
+						std::pair<typename MappedType::first_type, typename MappedType::second_type>>;
 
-			template <typename MappedType>
-			concept IsSet = !IsMap<MappedType>;
+				template<typename MappedType>
+				concept IsSetConcept = !IsMapConcept<MappedType>;
+
+			}//!namespace details::requirements
 
 			template<typename T, typename Hasher, typename Equal>
 			class HashTable {
@@ -116,10 +122,10 @@ namespace containers {
 				using MappedType = T;
 
 				static constexpr auto getKeyType(){
-					if constexpr (requires {requires IsMap<MappedType>;}) {
-						return std::type_identity<typename MappedType::FirstType>{};
+					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
+						return std::type_identity<typename MappedType::first_type>{};
 					}
-					else if constexpr (requires {requires IsSet<MappedType>;}) {
+					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
 						return std::type_identity<MappedType>{};
 					}
 					else {
@@ -130,10 +136,10 @@ namespace containers {
 				using KeyType = typename decltype(getKeyType())::type;
 
 				static constexpr auto getValueType(){
-					if constexpr (requires {requires IsMap<MappedType>;}) {
-						return std::type_identity<typename MappedType::SecondType>{};
+					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
+						return std::type_identity<typename MappedType::second_type>{};
 					}
-					else if constexpr (requires {requires IsSet<MappedType>;}) {
+					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
 						return std::type_identity<MappedType>{};
 					}
 					else {
@@ -144,26 +150,26 @@ namespace containers {
 				using ValueType = typename decltype(getValueType())::type;
 
 				struct KeyExtractor {
-					ValueType const &operator()(ValueType const& value) const
-					requires IsSet<MappedType>
-					{
-						return value;
-					}
-
-					KeyType const &operator()(InternalPair<KeyType const, ValueType> const& value) const
-					requires IsMap<MappedType>
+					KeyType const& operator()(std::pair<KeyType const, ValueType> const& value) const
+					requires requirements::IsMapConcept<MappedType>
 					{
 						return value.first;
+					}
+
+					ValueType const& operator()(ValueType const& value) const
+					requires requirements::IsSetConcept<MappedType>
+					{
+						return value;
 					}
 				};
 
 				using Data = typename std::pmr::list<MappedType>;
 
 				static constexpr auto getIterType(){
-					if constexpr (requires {requires IsMap<MappedType>;}) {
+					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
 						return std::type_identity<typename Data::iterator>{};
 					}
-					else if constexpr (requires {requires IsSet<MappedType>;}) {
+					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
 						return std::type_identity<typename Data::const_iterator>{};
 					}
 					else {
@@ -178,111 +184,179 @@ namespace containers {
 
 			private:
 				struct Access {
-					using Bucket = typename std::vector<CIter>;
-					using Buckets = typename std::vector<Bucket>;
+					using AccessHelper = typename std::vector<std::optional<CIter>>;
+					using AccessIter = typename AccessHelper::iterator;
+					using AccessCIter = typename AccessHelper::const_iterator;
 
 					Data &data;
-					Buckets buckets;
-					std::size_t capacity {const_values::capacity};
-					std::size_t sz {const_values::sz};
+					AccessHelper accessHelper;
+					std::size_t capacity {const_values::initial_capacity};
+					std::size_t sz {0};
+
 					Hasher hasher;
 					Equal equal;
-					double maxFactor {const_values::maxFactor};
 					KeyExtractor keyExtractor;
 
 					explicit Access(Data &data)
 							: data(data)
 					{
-						buckets.resize(capacity);
+						accessHelper.resize(capacity);
 					}
 
-					Bucket & getBucket(KeyType const &key) {
-						std::size_t const hashValue {hasher(key) % capacity};
-						return buckets[hashValue];
-					}
+					AccessIter getElemIter(KeyType const &key) {
+						std::size_t h {hasher(key) % capacity};
+						std::size_t step {h};
+						step |= 1;
 
-					Bucket const& getBucket(KeyType const &key) const {
-						std::size_t const hashValue {hasher(key) % capacity};
-						return buckets[hashValue];
-					}
-
-					MappedType const *insert(MappedType mappedValue){
-						auto const& key {keyExtractor(mappedValue)};
-						Bucket &bucket {getBucket(key)};
-						for (auto const &elem: bucket) {
-							if (equal(keyExtractor(*elem), key)) {
-								return &(*elem);
+						for (std::size_t i = 0; i != capacity; ++i) {
+							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
+								return accessHelper.begin() + h;
 							}
+							h = (h + step) % capacity;
 						}
+						return accessHelper.end();
+					}
+
+					AccessCIter getElemIter(KeyType const &key) const {
+						std::size_t h {hasher(key) % capacity};
+						std::size_t step {h};
+						step |= 1;
+
+						for (std::size_t i = 0; i != capacity; ++i) {
+							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
+								return accessHelper.cbegin() + h;
+							}
+							h = (h + step) % capacity;
+						}
+						return accessHelper.cend();
+					}
+
+					CIter find(KeyType const &key) {
+						AccessIter elemIter {getElemIter(key)};
+						return contains(elemIter) ? elemIter->value() : data.end();
+					}
+
+					CIter find(KeyType const &key) const{
+						AccessCIter elemIter {getElemIter(key)};
+						return contains(elemIter) ? elemIter->value() : data.cend();
+					}
+
+					CIter emplace(MappedType mappedValue){
 						data.emplace_back(std::move(mappedValue));
-						bucket.emplace_back(std::prev(data.end()));
-						T const *res {&(data.back())};
 						++sz;
-						rehash();
-						return res;
+						return std::prev(data.end());
+					}
+
+					CIter insert(MappedType mappedValue){
+						auto const& key {keyExtractor(mappedValue)};
+						AccessIter elemIter {getElemIter(key)};
+						if (contains(elemIter)) {
+							return elemIter->value();
+						}
+						else if (emplaceable(elemIter)) {
+							*elemIter = emplace(std::move(mappedValue));
+							return elemIter->value();
+						}
+						else {
+							rehash();
+							elemIter = getElemIter(key);
+							if (!emplaceable(elemIter)) {
+								throw std::runtime_error("Unable to emplace after rehash");
+							}
+							*elemIter = emplace(std::move(mappedValue));
+							return elemIter->value();
+						}
 					}
 
 					void erase(KeyType const &key){
-						Bucket &bucket {getBucket(key)};
-						for (auto it = bucket.begin(), ite = bucket.end(); it != ite; ++it) {
-							if (equal(keyExtractor((*(*it))), key)) {
-								data.erase(*it);
-								bucket.erase(it);
-								--sz;
-								return;
+						AccessIter elemIter {getElemIter(key)};
+						if (contains(elemIter)) {
+							data.erase(elemIter->value());
+
+							/*
+							https://en.cppreference.com/w/cpp/iterator/distance
+							Complexity
+							Linear.
+							However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
+							*/
+							std::size_t h = std::distance(accessHelper.begin(), elemIter);
+							std::size_t step = h;
+							step |= 1;
+
+							accessHelper[h].reset();
+							--sz;
+
+							for (std::size_t i = 0; i != capacity; ++i) {
+								h = (h + step) % capacity;
+								if (!accessHelper[h].has_value()) {
+									break;
+								}
+
+								CIter elem {*accessHelper[h]};
+								accessHelper[h].reset();
+
+								std::size_t newH = hasher(keyExtractor(*elem)) % capacity;
+								std::size_t newStep = newH;
+								newStep |= 1;
+
+								for (std::size_t j = 0; j != capacity; ++j) {
+									if (!accessHelper[newH].has_value()) {
+										accessHelper[newH] = elem;
+										break;
+									}
+									newH = (newH + newStep) % capacity;
+								}
 							}
 						}
 					}
 
 					void erase(CIter cIter){
-						data.erase(cIter);
 						auto const& key {keyExtractor(*cIter)};
-						Bucket &bucket {getBucket(key)};
-						for (auto it = bucket.begin(), ite = bucket.end(); it != ite; ++it) {
-							if (equal(keyExtractor((*(*it))), key)) {
-								bucket.erase(it);
-								--sz;
-								return;
+						erase(key);
+					}
+
+					void rehash() {
+						std::size_t const new_capacity {capacity * 2u};
+						AccessHelper newAccessHelper(new_capacity);
+
+						for (auto &entry : accessHelper) {
+							if (entry.has_value()) {
+								std::size_t h {hasher(keyExtractor(*entry.value())) % new_capacity};
+								std::size_t step {h};
+								step |= 1;
+								bool entryUpdated {false};
+
+								for (std::size_t i = 0; i != new_capacity; ++i) {
+									if (!newAccessHelper[h].has_value()) {
+										newAccessHelper[h] = entry.value();
+										entryUpdated = true;
+										break;
+									}
+									h = (h + step) % new_capacity;
+								}
+								if (!entryUpdated) {
+									throw std::runtime_error("Failed to update element while rehashing");
+								}
 							}
 						}
+						std::swap(accessHelper, newAccessHelper);
+						capacity = new_capacity;
 					}
 
-					CIter getElemIter(KeyType const &key) const {
-						Bucket const& bucket {getBucket(key)};
-						for (auto const &elem: bucket) {
-							if (equal(keyExtractor(*elem), key)) {
-								return elem;
-							}
-						}
-						return data.end();
+					bool contains(AccessCIter iter) const {
+						return iter != accessHelper.end() && iter->has_value();
 					}
 
-					bool contains(KeyType const &key) const{
-						return getElemIter(key) != data.end();
+					bool contains(KeyType const &key) const {
+						return contains(getElemIter(key));
 					}
 
-					std::size_t size() const{
-						return sz;
+					bool emplaceable(AccessCIter iter) const {
+						return iter != accessHelper.end() && !iter->has_value();
 					}
 
-					bool empty() const{
-						return sz == 0u;
-					}
-
-					void rehash(){
-						double const currFactor {1.0 * sz / capacity};
-						if (currFactor < maxFactor) {
-							return;
-						}
-						capacity *= 2u;
-						Buckets newBuckets(capacity);
-						for (auto const &bucket: buckets) {
-							for (auto const &elem: bucket) {
-								std::size_t const hashValue {hasher(keyExtractor(*elem)) % capacity};
-								newBuckets[hashValue].emplace_back(elem);
-							}
-						}
-						buckets = std::move(newBuckets);
+					bool emplaceable(KeyType const &key) const {
+						return emplaceable(getElemIter(key));
 					}
 				};
 
@@ -301,11 +375,13 @@ namespace containers {
 
 				template<typename... Args>
 				requires std::constructible_from<MappedType, Args...>
-				MappedType const *insert(Args&&... args){
+				CIter insert(Args&&... args){
 					return access.insert(MappedType(std::forward<Args>(args)...));
 				}
 
-				CIter find(KeyType const& key) { return access.getElemIter(key); }
+				CIter find(KeyType const& key) { return access.find(key); }
+
+				CIter find(KeyType const& key) const { return access.find(key); }
 
 				void erase(KeyType const &key) { access.erase(key); }
 
@@ -321,9 +397,9 @@ namespace containers {
 					return found;
 				}
 
-				std::size_t size() const{ return access.size(); }
+				std::size_t size() const{ return access.sz; }
 
-				bool empty() const{ return access.empty(); }
+				bool empty() const{ return access.sz == 0u; }
 
 				Iter begin() { return data.begin(); }
 
@@ -341,7 +417,7 @@ namespace containers {
 
 				CRIter crend() const{ return data.crend(); }
 
-			private:
+			public:
 				Data data;
 				Access access;
 			};
@@ -360,16 +436,17 @@ namespace containers {
 		requires
 		::requirements::hash::IsHash<Key, Hasher, std::size_t> &&
 		::requirements::cmp::IsComparator<Key, Equal>
-		struct Map final : public details::HashTable<details::InternalPair<Key const, Value>, Hasher, Equal> {
-			using details::HashTable<details::InternalPair<Key const, Value>, Hasher, Equal>::HashTable;
+		struct Map final : public details::HashTable<std::pair<Key const, Value>, Hasher, Equal> {
+			using details::HashTable<std::pair<Key const, Value>, Hasher, Equal>::HashTable;
 
 			Value& operator[](Key const& key) {
 				auto found = this->find(key);
 				if (found != this->end()) {
 					return const_cast<Value&>(found->second);
 				}
-				auto* mappedValue {this->insert(key)};
-				return const_cast<Value&>(mappedValue->second);
+				static_assert(std::is_default_constructible_v<Value>, "hash table operator[] requires default constructible Value");
+				auto inserted {this->insert(key, Value{})};
+				return const_cast<Value&>(inserted->second);
 			}
 		};
 

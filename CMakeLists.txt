@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.19)
 set (PROJECT_NAME "Hash table, Chain addressing, no invalidation whatsoever")
 project(${PROJECT_NAME}
         VERSION 0.1
@@ -8,3 +8,4 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(./tests)
 add_subdirectory(./benchmark)
+add_subdirectory(./profiler)

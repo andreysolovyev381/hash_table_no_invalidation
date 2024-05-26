@@ -146,13 +146,26 @@ TEST(hash_table_map, iterating_backwards) {
 
 TEST(hash_table_map, no_invalidation) {
 	::containers::hash_table::Map<int, int> hashTable;
-	auto const* const ptrBefore {hashTable.insert(-1, 1)};
+	auto iterBefore {hashTable.insert(-1, 1)};
 	for (int i = 0; i != 1'000'000; ++i) {
 		hashTable.insert(i, 1);
 	}
-	auto const* const ptrAfter {&*hashTable.find(-1)};
-	ASSERT_EQ(ptrBefore, ptrAfter);
+	auto iterAfter {hashTable.find(-1)};
+	ASSERT_EQ(iterBefore->first, iterAfter->first);
+	ASSERT_EQ(iterBefore->second, iterAfter->second);
 }
+
+TEST(hash_table_map, hash_values_collision) {
+	::containers::hash_table::Map<int, int> hashTable;
+	hashTable.insert(799, 1); //with initial capacity 20 h == 19
+	hashTable.insert(919, 1);//with initial capacity 20 h == 19 -> busy -> (19 + 19) / 20 == 18
+	ASSERT_EQ(hashTable.size(), 2u);
+	hashTable.erase(799); //erases slot 19
+	ASSERT_EQ(hashTable.size(), 1u);
+	hashTable.insert(919, 2); //if no precautions would place it recently freed slot 19
+	ASSERT_EQ(hashTable.size(), 1u);
+}
+
 
 inline
 auto user_scenario_run = [](std::string str, auto& hash_table){
@@ -730,3 +743,4 @@ None
 	containers::hash_table::Map<int, int> ht;
 	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
+
