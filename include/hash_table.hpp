@@ -154,7 +154,7 @@ namespace containers {
 						return std::type_identity<typename Data::const_iterator>{};
 					}
 					else {
-						throw std::invalid_argument("can't recognized mapped type extracting Value Type");
+						throw std::invalid_argument("can't recognized mapped type extracting Iter Type");
 					}
 				}
 

@@ -1,11 +1,11 @@
 ## Hash table with no invalidation of pointers and iterators
 
 ### Rational
-Another project of mine required a **hash table that never invalidates** its pointers and iterators. I made one in the hope that it would be on par with `std::unordered`. Header only, single C++20 file, see ./include folder.
+Another project of mine required a **hash table that never invalidates** its pointers and iterators. I made one in the hope that it would be on par with `std::unordered`. Header only, single C++20 file, see ./include folder. See ./tests as usage examples.
 
 
 ### Reference to other hash tables
-There are many other hash tables, but I found that all of them are focused on performance, sacrificing exactly what I need — persistence of pointers and iterators. However, there are some serious attempts. Consider reading the [results](https://martin.ankerl.com/2019/04/01/hashmap-benchmarks-01-overview/) of benchmark made by people behind `robin_hood::hash_table`. I also recommend this [reading](https://greg7mdp.github.io/parallel-hashmap/) from Greg Popovic.
+There are many other hash tables, but I found that all of them are focused on performance, sacrificing exactly what I need — persistence of pointers and iterators. However, there are some serious attempts. Consider reading the [results](https://martin.ankerl.com/2019/04/01/hashmap-benchmarks-01-overview/) of benchmark made by people behind `robin_hood::hash_table`. I also recommend this [reading](https://greg7mdp.github.io/parallel-hashmap/) from Greg Popovitch.
 
 ### Benchmark
 See ./benchmark folder for code. 
