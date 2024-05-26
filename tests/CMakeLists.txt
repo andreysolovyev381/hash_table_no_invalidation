@@ -33,6 +33,7 @@ endif()
 add_executable(${TESTS_NAME}
         ./hash_table_set.cpp
         ./hash_table_map.cpp
+        ./pmr.cpp
         ./main.cpp
 )
 target_link_libraries(${TESTS_NAME}

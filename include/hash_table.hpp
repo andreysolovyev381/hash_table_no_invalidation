@@ -29,7 +29,7 @@ namespace requirements {
 		static inline constexpr bool is_hash_v{IsHash<Type, MaybeHash, HashResult> ? true : false};
 
 		[[maybe_unused]] inline auto combine = [](std::size_t hash, std::size_t seed = 0) {
-			static constexpr std::size_t magic_number = 0x9e3779b9; //boost hash_combine as a source
+			static constexpr std::size_t magic_number {0x9e3779b9}; //boost hash_combine as a source
 			seed ^= hash + magic_number + (seed << 6) + (seed >> 2);
 			return seed;
 		};
@@ -66,33 +66,12 @@ namespace containers {
 	namespace pmr {
 
 		static inline std::pmr::synchronized_pool_resource resource(std::pmr::get_default_resource());
+
 		using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
+
 		//	usage example
 		//	std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
-#if 0
-		struct AllocatorAwareObject {
-			using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-			allocator_type alloc;
 
-			allocator_type& get_allocator() {
-				return alloc;
-			}
-
-			explicit AllocatorAwareObject([[maybe_unused]]allocator_type alloc = {})
-			{}
-
-			AllocatorAwareObject(const AllocatorAwareObject&, const allocator_type&)
-			{}
-
-			AllocatorAwareObject(AllocatorAwareObject&&, const allocator_type&)
-			{}
-
-			AllocatorAwareObject& operator=(const AllocatorAwareObject&) = delete;
-
-			AllocatorAwareObject& operator=(AllocatorAwareObject&&) = delete;
-
-		};
-#endif
 	}//!namespace details::pmr
 
 	namespace hash_table {
@@ -265,7 +244,7 @@ namespace containers {
 							rehash();
 							elemIter = getElemIter(key);
 							if (!emplaceable(elemIter)) {
-								throw std::runtime_error("Unable to emplace after rehash");
+								throw std::runtime_error("Unable to emplace after rehash, consider reducing const_values::maxLoadFactor");
 							}
 							*elemIter = emplace(std::move(mappedValue));
 							return elemIter->value();
@@ -369,9 +348,13 @@ namespace containers {
 
 				virtual ~HashTable() = default;
 
-				//todo
-				// ctors and
-				// assignment operators due to pmr?
+				HashTable(HashTable const&) = delete;
+
+				HashTable(HashTable &&) = default;
+
+				HashTable& operator=(HashTable const&) = delete;
+
+				HashTable& operator=(HashTable &&) = default;
 
 				template<typename... Args>
 				requires std::constructible_from<MappedType, Args...>
@@ -415,7 +398,7 @@ namespace containers {
 
 				CRIter crend() const{ return data.crend(); }
 
-			public:
+			private:
 				Data data;
 				Access access;
 			};
