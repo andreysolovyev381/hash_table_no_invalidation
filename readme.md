@@ -32,7 +32,7 @@ Erase containers::hash_table::Set     /min_time:5.000      0.033 us        0.032
 But thanks to [Bloomberg](https://github.com/bloomberg) and their contribution to committee work, we have `std:pmr` namespace and polymorphic allocators.
 Long story short, this hash table is built upon `std::pmr::list` that allows to place list nodes in memory in an array-like fashion, thus making such a container more cache-friendly.
 
-  Another issue that comes from usage of `std::pmr` is a strong requirement to follow "rule of five". Specifically, see ./test/pmr.cpp — copy ctor and assignment fail if implemented by default. That is a reason why HashTable is a move-only. Implementation of allocator aware linked list may be a good solution here, ie see the root source of everything, [Pablo Halpern](https://github.com/phalpern)'s CppCon2017 [report](https://www.youtube.com/watch?v=v3dz-AKOVL8). But it is beyond my needs, so feel free to contribute :smile:
+  Another issue that comes from usage of `std::pmr` is a strong requirement to follow "rule of five". Specifically, see ./test/pmr.cpp — copy ctor and assignment fail if implemented by default. That is a reason why HashTable is a move-only. Implementation of allocator aware linked list may be a good solution here, ie see the root source of everything, [Pablo Halpern](https://github.com/phalpern)'s CppCon2017 [report](https://www.youtube.com/watch?v=v3dz-AKOVL8). But it is beyond my needs, so feel free to contribute :smirk:
 
 * My hypothesis is that after some insert / remove cycles this hash table will deteriorate in performance — "pogrom is a pogrom", list is a list, appearance of "holes" in that initial array-like placement is inevitable.
 
