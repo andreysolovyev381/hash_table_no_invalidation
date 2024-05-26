@@ -102,6 +102,7 @@ namespace containers {
 			namespace const_values {
 
 				static constexpr std::size_t initial_capacity {20};
+				static constexpr double maxLoadFactor {0.5};
 
 			}//!namespace details::const_values
 
@@ -205,8 +206,7 @@ namespace containers {
 
 					AccessIter getElemIter(KeyType const &key) {
 						std::size_t h {hasher(key) % capacity};
-						std::size_t step {h};
-						step |= 1;
+						std::size_t step {h | 1};
 
 						for (std::size_t i = 0; i != capacity; ++i) {
 							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
@@ -236,7 +236,7 @@ namespace containers {
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					CIter find(KeyType const &key) const{
+					CIter find(KeyType const &key) const {
 						AccessCIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.cend();
 					}
@@ -248,6 +248,10 @@ namespace containers {
 					}
 
 					CIter insert(MappedType mappedValue){
+						double const currLoadFactor {1.0 * sz / capacity};
+						if (currLoadFactor > const_values::maxLoadFactor) {
+							rehash();
+						}
 						auto const& key {keyExtractor(mappedValue)};
 						AccessIter elemIter {getElemIter(key)};
 						if (contains(elemIter)) {
@@ -268,44 +272,43 @@ namespace containers {
 						}
 					}
 
-					void erase(KeyType const &key){
+					void erase(KeyType const &key) {
 						AccessIter elemIter {getElemIter(key)};
-						if (contains(elemIter)) {
-							data.erase(elemIter->value());
+						if (!contains(elemIter)) {
+							return;
+						}
 
-							/*
-							https://en.cppreference.com/w/cpp/iterator/distance
-							Complexity
-							Linear.
-							However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
-							*/
-							std::size_t h = std::distance(accessHelper.begin(), elemIter);
-							std::size_t step = h;
-							step |= 1;
+						data.erase(elemIter->value());
+						/*
+						https://en.cppreference.com/w/cpp/iterator/distance
+						Complexity
+						Linear.
+						However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
+						*/
+						std::size_t h = std::distance(accessHelper.begin(), elemIter);
+						std::size_t step {h | 1};
 
+						accessHelper[h].reset();
+						--sz;
+
+						for (std::size_t i = 0; i != capacity; ++i) {
+							h = (h + step) % capacity;
+							if (!accessHelper[h].has_value()) {
+								break;
+							}
+
+							CIter elem {*accessHelper[h]};
 							accessHelper[h].reset();
-							--sz;
 
-							for (std::size_t i = 0; i != capacity; ++i) {
-								h = (h + step) % capacity;
-								if (!accessHelper[h].has_value()) {
+							std::size_t newH {hasher(keyExtractor(*elem)) % capacity};
+							std::size_t newStep {newH | 1};
+
+							for (std::size_t j = 0; j != capacity; ++j) {
+								if (!accessHelper[newH].has_value()) {
+									accessHelper[newH] = elem;
 									break;
 								}
-
-								CIter elem {*accessHelper[h]};
-								accessHelper[h].reset();
-
-								std::size_t newH = hasher(keyExtractor(*elem)) % capacity;
-								std::size_t newStep = newH;
-								newStep |= 1;
-
-								for (std::size_t j = 0; j != capacity; ++j) {
-									if (!accessHelper[newH].has_value()) {
-										accessHelper[newH] = elem;
-										break;
-									}
-									newH = (newH + newStep) % capacity;
-								}
+								newH = (newH + newStep) % capacity;
 							}
 						}
 					}
@@ -322,8 +325,7 @@ namespace containers {
 						for (auto &entry : accessHelper) {
 							if (entry.has_value()) {
 								std::size_t h {hasher(keyExtractor(*entry.value())) % new_capacity};
-								std::size_t step {h};
-								step |= 1;
+								std::size_t step {h | 1};
 								bool entryUpdated {false};
 
 								for (std::size_t i = 0; i != new_capacity; ++i) {
@@ -347,17 +349,15 @@ namespace containers {
 						return iter != accessHelper.end() && iter->has_value();
 					}
 
-					bool contains(KeyType const &key) const {
-						return contains(getElemIter(key));
+					bool contains(KeyType const& key) const {
+						AccessCIter iter {getElemIter(key)};
+						return contains(iter);
 					}
 
 					bool emplaceable(AccessCIter iter) const {
 						return iter != accessHelper.end() && !iter->has_value();
 					}
 
-					bool emplaceable(KeyType const &key) const {
-						return emplaceable(getElemIter(key));
-					}
 				};
 
 			public:
@@ -380,8 +380,6 @@ namespace containers {
 				}
 
 				CIter find(KeyType const& key) { return access.find(key); }
-
-				CIter find(KeyType const& key) const { return access.find(key); }
 
 				void erase(KeyType const &key) { access.erase(key); }
 

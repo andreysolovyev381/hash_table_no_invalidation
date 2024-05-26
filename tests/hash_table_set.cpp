@@ -3,7 +3,7 @@
 //
 
 #include <gtest/gtest.h>
-#include "../hash_table.hpp"
+#include "../include/hash_table.hpp"
 
 TEST(hash_table_set, empty) {
 	::containers::hash_table::Set<int> hashTable;

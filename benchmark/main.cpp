@@ -4,7 +4,7 @@
 
 #include <benchmark/benchmark.h>
 
-#include "../hash_table.hpp"
+#include "../include/hash_table.hpp"
 #include <random>
 #include <unordered_set>
 #include <unordered_map>

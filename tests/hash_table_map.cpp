@@ -3,7 +3,7 @@
 //
 
 #include <gtest/gtest.h>
-#include "../hash_table.hpp"
+#include "../include/hash_table.hpp"
 
 TEST(hash_table_map, empty) {
 	::containers::hash_table::Map<int, int> hashTable;
