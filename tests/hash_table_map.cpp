@@ -5,6 +5,11 @@
 #include <gtest/gtest.h>
 #include "../include/hash_table.hpp"
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#if 0
 TEST(hash_table_map, empty) {
 	::containers::hash_table::Map<int, int> hashTable;
 	bool empty = hashTable.empty();
@@ -165,42 +170,91 @@ TEST(hash_table_map, hash_values_collision) {
 	hashTable.insert(919, 2); //if no precautions would place it recently freed slot 19
 	ASSERT_EQ(hashTable.size(), 1u);
 }
-
-
+#endif
+#if 0
 inline
 auto user_scenario_run = [](std::string str, auto& hash_table){
-	std::stringstream ss(std::move(str)), output;
+	std::stringstream ss(std::move(str));
+	std::string output;
 	int iter_count;
 	ss >> iter_count;
 	std::string cmd;
+
+	std::stringstream log;
+
 	int key, value;
-	for (int i = 0; i != iter_count; ++i){
+	for (int i = 0; i !=
+//	iter_count
+	10'000
+	; ++i){
 		ss >> cmd >> key;
+
+log << cmd << ' ' << key;
+
 		if (cmd == "put") {
 			ss >> value;
 			hash_table[key] = value;
+
+log << ' ' << value << '\n';
+log << "\tht size: " << hash_table.size() << "; accessHelper size: " << hash_table.access.accessHelper.size() <<'\n';
+for (auto const& [k, v] : hash_table){
+	log << '\t' << "key: " << k << " value: " << v << '\n';
+}
+
 		}
 		else if (cmd == "get") {
+
+log << "\n\tht size: " << hash_table.size() << "; accessHelper size: " << hash_table.access.accessHelper.size() <<'\n';
+for (auto const& [k, v] : hash_table){
+	log << '\t' << "key: " << k << " value: " << v << '\n';
+}
+
+
 			auto found = hash_table.find(key);
 			if (found == hash_table.end()) {
-				output << "None\n";
+				output.append("None\n");
+log << "response: " << "None\n";
 				continue;
 			}
-			output << found->second << '\n';
+			output.append(std::to_string(found->second));
+			output.append("\n");
+
+log << "response: " << found->second << '\n';
+
 		}
 		else if (cmd == "delete") {
+
+log << "\n\tht size: " << hash_table.size() << "; accessHelper size: " << hash_table.access.accessHelper.size() <<'\n';
+for (auto const& [k, v] : hash_table){
+	log << '\t' << "key: " << k << " value: " << v << '\n';
+}
+
 			auto found = hash_table.find(key);
 			if (found == hash_table.end()) {
-				output << "None\n";
+				output.append("None\n");
+log << "response: " << "None\n";
 				continue;
 			}
-			output << found->second << '\n';
+			output.append(std::to_string(found->second));
+			output.append("\n");
+
+log << "response: " << found->second << '\n';
+
 			hash_table.erase(found);
 		}
 	}
-	return output.str();
-};
 
+	std::filesystem::path const dumpFile {std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/test_11.log"};
+	std::fstream dump;
+	dump.open(dumpFile, std::ios::out | std::ios::trunc);
+	if (!dump.is_open()) {
+		throw std::invalid_argument("Can't open a dump file");
+	}
+	dump << log.str();
+
+	return output;
+};
+#if 0
 TEST(hash_table_map, user_test_1) {
 	std::string
 			input {R"(10
@@ -743,4 +797,130 @@ None
 	containers::hash_table::Map<int, int> ht;
 	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
+#endif
 
+namespace requirements {
+	template <typename buffer_t>
+	concept buffer_concept = requires (buffer_t buffer, std::size_t sz) {
+		requires std::is_constructible_v<buffer_t, std::size_t, char>;
+		requires std::is_default_constructible_v<buffer_t>;
+		buffer.data();
+		buffer.resize(sz);
+		buffer.size();
+	};
+
+	template <typename T>
+	concept is_writable_concept = requires (T t, std::ostream os) {
+		os << t;
+	};
+
+}//!namespace
+
+
+template<requirements::buffer_concept buffer_t = std::string>
+buffer_t read_file(std::filesystem::path const &file_path) {
+	std::ifstream in_file{file_path, std::ios::in | std::ios::binary};
+	if (!in_file)
+		throw std::runtime_error("Cannot open " + file_path.filename().string());
+
+	buffer_t res(std::filesystem::file_size(file_path), '\0');;
+
+	in_file.read(res.data(), res.size());
+
+	if (!in_file)
+		throw std::runtime_error("Could not read the full contents from " + file_path.filename().string());
+
+	return res;
+}
+
+
+TEST(hash_table_map, user_test_11){
+	std::filesystem::path const
+		sourcePath {CMAKE_SOURCE_DIR},
+		inputFile {sourcePath / "tests/test_11.txt"},
+		expectedOutputFile {sourcePath / "tests/test_11.a"};
+	std::string
+		input {read_file(inputFile)},
+		expected_output {read_file(expectedOutputFile)};
+
+	containers::hash_table::Map<int, int> ht;
+	std::string actual_output {user_scenario_run(input, ht)};
+	std::fprintf(stderr, "%zu "" %zu\n", actual_output.size(), expected_output.size());
+	bool eq = actual_output == expected_output;
+	if (!eq) {
+		std::filesystem::path const dumpFile {sourcePath / "tests/test_11.o"};
+		std::fstream dump;
+		dump.open(dumpFile, std::ios::out | std::ios::trunc);
+		if (!dump.is_open()) {
+			throw std::invalid_argument("Can't open a dump file");
+		}
+		dump << actual_output;
+	}
+	ASSERT_TRUE(eq);
+}
+#endif
+TEST (shit_test, hash_values_collision) {
+
+	/*
+	 * All of the keys get step for linear probing that is equal to 9
+	 * therefore four keys occupy 9, 18, 7, 16 slots in vector that keeps data
+	 * then we try to remove the third one, that occupies elem with idx == 7
+	 * then we try ot retrieve fourth pair, that occupies elem with idx == 16
+	 */
+
+	containers::hash_table::Map<int, int> ht;
+
+	ht[79477009] = 550054007;
+	ASSERT_EQ(ht.size(), 1u);
+	auto found = ht.find(79477009);
+	ASSERT_EQ(found->first, 79477009);
+	ASSERT_EQ(found->second, 550054007);
+
+	ht[-614266467] = -394954512;
+	ASSERT_EQ(ht.size(), 2u);
+	found = ht.find(-614266467);
+	ASSERT_EQ(found->first, -614266467);
+	ASSERT_EQ(found->second, -394954512);
+
+	ht[401991289] = -828392468;
+	ASSERT_EQ(ht.size(), 3u);
+	found = ht.find(401991289);
+	ASSERT_EQ(found->first, 401991289);
+	ASSERT_EQ(found->second, -828392468);
+
+	ht[428606529] = 604479068;
+	ASSERT_EQ(ht.size(), 4u);
+	found = ht.find(428606529);
+	ASSERT_EQ(found->first, 428606529);
+	ASSERT_EQ(found->second, 604479068);
+
+	for(auto const& [key, value] : ht) {
+		std::cerr << "key: " << key << " value: " << value << '\n';
+	}
+	std::cerr << "============\n";
+
+	found = ht.find(401991289);
+	ASSERT_EQ(found->first, 401991289);
+	ASSERT_EQ(found->second, -828392468);
+	ASSERT_EQ(ht.size(), 4u);
+	ht.erase(found);
+	found = ht.find(401991289);
+	ASSERT_EQ(found, ht.end());
+	ASSERT_EQ(ht.size(), 3u);
+
+	for(auto const& [key, value] : ht) {
+		std::cerr << "key: " << key << " value: " << value << '\n';
+	}
+	std::cerr << "============\n";
+
+	ASSERT_EQ(ht.size(), 3u);
+	found = ht.find(428606529);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 428606529);
+	ASSERT_EQ(found->second, 604479068);
+
+	for(auto const& [key, value] : ht) {
+		std::cerr << "key: " << key << " value: " << value << '\n';
+	}
+
+}

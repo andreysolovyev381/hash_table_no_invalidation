@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <list>
 #include <optional>
+#include <variant>
+
 #include <functional>
 #include <concepts>
 #include <type_traits>
@@ -199,8 +201,33 @@ namespace containers {
 						std::size_t h {hasher(key) % capacity};
 						std::size_t step {h | 1};
 
+						
+
+std::cerr << "key: " << key << "; step: " << h << '\n'; //todo remove
+
+
+
+//9 18 7 16
 						for (std::size_t i = 0; i != capacity; ++i) {
 							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
+
+								std::cerr << "\tPrinting AccessHelper:\n";
+								for (std::size_t j = 0; j != accessHelper.size(); ++j){
+									std::cerr << "\t\tpos: " << j << " value: ";
+									if (accessHelper[j].has_value()) {
+										std::cerr
+												<< "{key: " << (*(accessHelper[j].value())).first
+												<< ", value: " << (*(accessHelper[j].value())).second << "}"
+												<< '\n';
+									}
+									else {
+										std::cerr << "None\n";
+									}
+								}
+
+
+
+
 								return accessHelper.begin() + h;
 							}
 							h = (h + step) % capacity;
@@ -225,11 +252,6 @@ namespace containers {
 					CIter find(KeyType const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.end();
-					}
-
-					CIter find(KeyType const &key) const {
-						AccessCIter elemIter {getElemIter(key)};
-						return contains(elemIter) ? elemIter->value() : data.cend();
 					}
 
 					CIter emplace(MappedType mappedValue){
@@ -418,7 +440,7 @@ namespace containers {
 
 				CRIter crend() const{ return data.crend(); }
 
-			private:
+			public:
 				Data data;
 				Access access;
 			};
