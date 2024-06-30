@@ -30,12 +30,12 @@ Here are the results for 1 million ints.
 ------------------------------------------------------------------------------------------------
 Benchmark                                                      Time             CPU   Iterations
 ------------------------------------------------------------------------------------------------
-Insertion std::unordered_set          /min_time:5.000      0.140 us        0.139 us     51874458
-Insertion containers::hash_table::Set /min_time:5.000      0.122 us        0.121 us     56272570
-Access std::unordered_set             /min_time:5.000      0.066 us        0.066 us    106103478
-Access containers::hash_table::Set    /min_time:5.000      0.061 us        0.061 us    114491522
-Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    632791640
-Erase containers::hash_table::Set     /min_time:5.000      0.029 us        0.029 us    233041224
+Insertion std::unordered_set          /min_time:5.000      0.169 us        0.165 us     35291426
+Insertion containers::hash_table::Set /min_time:5.000      0.133 us        0.128 us     53189364
+Access std::unordered_set             /min_time:5.000      0.077 us        0.074 us     97083641
+Access containers::hash_table::Set    /min_time:5.000      0.065 us        0.065 us    107453296
+Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    613731931
+Erase containers::hash_table::Set     /min_time:5.000      0.089 us        0.089 us     69120837
 
 ```
 
