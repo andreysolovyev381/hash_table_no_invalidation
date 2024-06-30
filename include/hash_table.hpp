@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <list>
-#include <optional>
 #include <variant>
 
 #include <functional>
@@ -83,7 +82,8 @@ namespace containers {
 
 			namespace const_values {
 
-				static constexpr std::size_t initial_capacity {20};
+				static constexpr std::size_t initial_capacity {1<<5};
+				static constexpr std::size_t max_type_sizeof {1<<10};
 				static constexpr double maxLoadFactor {0.5};
 				static constexpr int maxEmplaceAttempts {5};
 
@@ -173,41 +173,25 @@ namespace containers {
 
 					struct Deleted{};
 
+					std::variant<std::monostate, IterType, Deleted> value_;
+
 					Element () = default;
 
-					Element (IterType data_) {
-						emplace(data_);
-					}
+					Element (IterType data_) { emplace(data_); }
 
-					constexpr bool is_free() const {
-						return std::holds_alternative<std::monostate>(value_);
-					}
+					constexpr bool is_free() const { return std::holds_alternative<std::monostate>(value_); }
 
-					constexpr bool has_value() const {
-						return std::holds_alternative<IterType>(value_);
-					}
+					constexpr bool has_value() const { return std::holds_alternative<IterType>(value_); }
 
-					constexpr bool is_deleted() const {
-						return std::holds_alternative<Deleted>(value_);
-					}
+					constexpr bool is_deleted() const { return std::holds_alternative<Deleted>(value_); }
 
-					IterType& value() {
-						return std::get<IterType>(value_);
-					}
+					IterType& value() { return std::get<IterType>(value_); }
 
-					IterType const& value() const {
-						return std::get<IterType>(value_);
-					}
+					IterType const& value() const { return std::get<IterType>(value_); }
 
-					void emplace(IterType data_) {
-						value_.template emplace<IterType>(data_);
-					}
+					void emplace(IterType data_) { value_.template emplace<IterType>(data_); }
 
-					void reset() {
-						value_.template emplace<Deleted>(Deleted{});
-					}
-
-					std::variant<std::monostate, IterType, Deleted> value_;
+					void reset() { value_.template emplace<Deleted>(Deleted{}); }
 
 				};
 
@@ -228,7 +212,9 @@ namespace containers {
 
 					explicit Access(Data &data)
 							: data(data)
-							, capacity {const_values::initial_capacity}
+							, capacity {sizeof(MappedType) > const_values::max_type_sizeof ?
+										1 :
+										const_values::initial_capacity}
 							, sz {0}
 							, deleted_count{0}
 					{
@@ -237,7 +223,11 @@ namespace containers {
 
 					explicit Access(Data &data, std::size_t capacity)
 							: data(data)
-							, capacity {capacity}
+							, capacity {capacity == 0 ?
+										sizeof(MappedType) > const_values::max_type_sizeof ?
+											1 :
+											const_values::initial_capacity
+										: capacity}
 							, sz {0}
 							, deleted_count{0}
 					{
@@ -278,7 +268,6 @@ namespace containers {
 						AccessIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
-
 
 					CIter insert(MappedType mappedValue){
 
@@ -325,33 +314,33 @@ namespace containers {
 							return;
 						}
 
-						std::size_t prev            {static_cast<std::size_t>(elemIter - accessHelper.begin())};
+						std::size_t idx_curr        {static_cast<std::size_t>(elemIter - accessHelper.begin())};
 						std::size_t const h         {hasher(key) % capacity};
 						std::size_t const step      {h | 1};
-						std::size_t	curr            {(prev + step) % capacity};
+						std::size_t	idx_next        {(idx_curr + step) % capacity};
 						std::size_t	count           {0};
 
 						auto should_remove = [&, this](){
-							return accessHelper[curr].is_free();
+							return accessHelper[idx_next].is_free();
 						};
 						auto should_swap = [&, this](){
-							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
-							std::size_t const hash_curr {hasher(key_curr) % capacity};
+							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
+							std::size_t const hash_next {hasher(key_next) % capacity};
 
 							//was calculated before
-							KeyType const& key_prev {keyExtractor(*(accessHelper[prev].value()))};
-							std::size_t const hash_prev {hasher(key_prev) % capacity};
+							KeyType const& key_curr {keyExtractor(*(accessHelper[idx_curr].value()))};
+							std::size_t const hash_curr {hasher(key_curr) % capacity};
 
-							return hash_curr == hash_prev;
+							return hash_next == hash_curr;
 						};
 						auto should_skip = [&, this](){
-							if (accessHelper[curr].is_deleted()) {
+							if (accessHelper[idx_next].is_deleted()) {
 								return true;
 							}
-							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
-							KeyType const& key_prev {keyExtractor(*(accessHelper[prev].value()))};
+							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
+							KeyType const& key_curr {keyExtractor(*(accessHelper[idx_curr].value()))};
 
-							return hasher(key_curr) != hasher(key_prev);
+							return hasher(key_next) != hasher(key_curr);
 						};
 
 						for (; count != capacity; ++count){
@@ -359,21 +348,21 @@ namespace containers {
 								break;
 							}
 							else if (should_skip()) {
-								curr = (curr + step) % capacity;
+								idx_next = (idx_next + step) % capacity;
 							}
 							else if (should_swap()) {
-								std::swap(accessHelper[curr], accessHelper[prev]);
-								prev = curr;
-								curr = (prev + step) % capacity;
+								std::swap(accessHelper[idx_next], accessHelper[idx_curr]);
+								idx_curr = idx_next;
+								idx_next = (idx_curr + step) % capacity;
 							}
 						}
 
-						data.erase(accessHelper[prev].value());
-						accessHelper[prev].reset();
+						data.erase(accessHelper[idx_curr].value());
+						accessHelper[idx_curr].reset();
 						--sz;
 						++deleted_count;
-					}//!func
-					
+					}
+
 					void erase(CIter cIter){
 						auto const& key {keyExtractor(*cIter)};
 						erase(key);
@@ -482,7 +471,7 @@ namespace containers {
 
 				CRIter crend() const{ return data.crend(); }
 
-			public:
+			private:
 				Data data;
 				Access access;
 			};

@@ -173,85 +173,41 @@ TEST(hash_table_map, hash_values_collision) {
 	ASSERT_EQ(hashTable.size(), 1u);
 }
 
-static bool new_log {true};
-
 inline
-auto log_error = [](std::string const& output_actual, std::string const& output_expected, auto& hash_table){
-	std::filesystem::path const dumpFile {std::filesystem::path(CMAKE_SOURCE_DIR) / "tests/error.log"};
-	std::fstream dump;
-	if (new_log) {
-		dump.open(dumpFile, std::ios::out | std::ios::trunc);
-		new_log = false;
-	}
-	else {
-		dump.open(dumpFile, std::ios::out | std::ios::app);
-	}
-	if (!dump.is_open()) {
-		throw std::invalid_argument("Can't open a dump file");
-	}
-	dump << "Actual output:\n\t\t" << output_actual << '\n';
-	dump << "Expected output:\n\t\t" << output_expected << '\n';
-
-	dump << "\tht size: " << hash_table.size() << "; accessHelper size: " << hash_table.access.accessHelper.size() <<'\n';
-	for (auto const& [k, v] : hash_table){
-		dump << '\t' << "key: " << k << " value: " << v << '\n';
-	}
-};
-
-inline
-auto user_scenario_run = [](std::string input_string, std::string const& output_string, auto& hash_table){
-	std::stringstream input(std::move(input_string));
-	std::stringstream output_expected(output_string);
+auto user_scenario_run = [](std::string input_string, auto& hash_table){
+	std::stringstream ss_input(std::move(input_string));
 
 	std::string output;
 	int iter_count;
-	input >> iter_count;
+	ss_input >> iter_count;
 	std::string cmd;
 
 	int key, value;
 	for (int i = 0; i != iter_count; ++i){
-		input >> cmd >> key;
+		ss_input >> cmd >> key;
 		if (cmd == "put") {
-			input >> value;
+			ss_input >> value;
 			hash_table[key] = value;
 		}
 		else if (cmd == "get") {
-			std::string output_line;
 			auto found = hash_table.find(key);
 			if (found == hash_table.end()) {
-				output_line.append("None");
+				output.append("None");
 			}
 			else {
-				output_line.append(std::to_string(found->second));
+				output.append(std::to_string(found->second));
 			}
-			output.append(output_line);
 			output.append("\n");
-
-			std::string expected_line;
-			output_expected >> expected_line;
-			if (output_line != expected_line) {
-				log_error(output_line, expected_line, hash_table);
-				return output;
-			}
 		}
 		else if (cmd == "delete") {
-			std::string output_line;
 			auto found = hash_table.find(key);
 			if (found == hash_table.end()) {
-				output_line.append("None");
+				output.append("None");
 			}
 			else {
-				output_line.append(std::to_string(found->second));
+				output.append(std::to_string(found->second));
 			}
-			output.append(output_line);
 			output.append("\n");
-
-			std::string expected_line;
-			output_expected >> expected_line;
-			if (output_line != expected_line) {
-				log_error(output_line, expected_line, hash_table);
-				return output;
-			}
 			hash_table.erase(found);
 		}
 	}
@@ -282,7 +238,7 @@ None
 None
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_2) {
@@ -304,7 +260,7 @@ None
 3
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_3) {
@@ -340,7 +296,7 @@ None
 None
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_4) {
@@ -376,7 +332,7 @@ None
 6
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_5) {
@@ -412,7 +368,7 @@ None
 None
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_6) {
@@ -607,7 +563,7 @@ None
 None
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 TEST(hash_table_map, user_test_7) {
@@ -799,7 +755,7 @@ None
 None
 )"};
 	containers::hash_table::Map<int, int> ht;
-	ASSERT_EQ(user_scenario_run(input, expected_output, ht), expected_output);
+	ASSERT_EQ(user_scenario_run(input, ht), expected_output);
 }
 
 namespace requirements {
@@ -845,19 +801,38 @@ TEST(hash_table_map, user_test_11){
 		expected_output {read_file(expectedOutputFile)};
 
 	containers::hash_table::Map<int, int> ht;
-	std::string actual_output {user_scenario_run(input, expected_output, ht)};
-	std::fprintf(stderr, "%zu "" %zu\n", actual_output.size(), expected_output.size());
-	bool eq = actual_output == expected_output;
-	if (!eq) {
-		std::filesystem::path const dumpFile {sourcePath / "tests/test_11.error"};
-		std::fstream dump;
-		dump.open(dumpFile, std::ios::out | std::ios::trunc);
-		if (!dump.is_open()) {
-			throw std::invalid_argument("Can't open a dump file");
+	std::string actual_output {user_scenario_run(input, ht)};
+
+	std::stringstream a (actual_output), e(expected_output);
+	std::string a_str, e_str;
+	int count {0};
+	while (true) {
+		++count;
+		bool a_read {a >> a_str};
+		bool e_read {e >> e_str};
+		if ((!a_read && e_read) || (a_read && !e_read)) {
+			std::cerr << "Uneven read from a and e\n";
+			std::cerr << (a_read ? a_str : e_str) << '\n';
+			break;
 		}
-		dump << actual_output;
+		else if (!a_read && !e_read) {
+#if 0
+			std::cerr << "End of both files\n";
+#endif
+			break;
+		}
+		else if (a_str != e_str) {
+			std::cerr << "a:\t\"" << a_str << "\"\n";
+			std::cerr << "e:\t\"" << e_str << "\"\n";
+		}
 	}
-	ASSERT_TRUE(eq);
+#if 0
+	std::cerr << "Read " << count << " lines\n";
+#endif
+
+	// 75009 - total expected lines count in output
+	// if we are here, it means that line by line we compared output
+	ASSERT_TRUE(count == 75009) << count;
 }
 
 TEST (hash_table_map, hash_values_collision3) {
