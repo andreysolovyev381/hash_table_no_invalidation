@@ -167,8 +167,52 @@ namespace containers {
 				using CRIter = typename Data::const_reverse_iterator;
 
 			private:
+
+				template <std::input_iterator IterType>
+				struct Element {
+
+					struct Deleted{};
+
+					Element () = default;
+
+					Element (IterType data_) {
+						emplace(data_);
+					}
+
+					constexpr bool is_free() const {
+						return std::holds_alternative<std::monostate>(value_);
+					}
+
+					constexpr bool has_value() const {
+						return std::holds_alternative<IterType>(value_);
+					}
+
+					constexpr bool is_deleted() const {
+						return std::holds_alternative<Deleted>(value_);
+					}
+
+					IterType& value() {
+						return std::get<IterType>(value_);
+					}
+
+					IterType const& value() const {
+						return std::get<IterType>(value_);
+					}
+
+					void emplace(IterType data_) {
+						value_.template emplace<IterType>(data_);
+					}
+
+					void reset() {
+						value_.template emplace<Deleted>(Deleted{});
+					}
+
+					std::variant<std::monostate, IterType, Deleted> value_;
+
+				};
+
 				struct Access {
-					using AccessHelper = typename std::vector<std::optional<CIter>>;
+					using AccessHelper = typename std::vector<Element<CIter>>;
 					using AccessIter = typename AccessHelper::iterator;
 					using AccessCIter = typename AccessHelper::const_iterator;
 
@@ -176,6 +220,7 @@ namespace containers {
 					AccessHelper accessHelper;
 					std::size_t capacity;
 					std::size_t sz;
+					std::size_t deleted_count;
 
 					Hasher hasher;
 					Equal equal;
@@ -185,6 +230,7 @@ namespace containers {
 							: data(data)
 							, capacity {const_values::initial_capacity}
 							, sz {0}
+							, deleted_count{0}
 					{
 						accessHelper.resize(capacity);
 					}
@@ -193,6 +239,7 @@ namespace containers {
 							: data(data)
 							, capacity {capacity}
 							, sz {0}
+							, deleted_count{0}
 					{
 						accessHelper.resize(capacity);
 					}
@@ -202,25 +249,9 @@ namespace containers {
 						std::size_t const step {h | 1};
 
 						for (std::size_t i = 0; i != capacity; ++i) {
-							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
-
-
-
-#if 0
-								std::cerr << "\tPrinting AccessHelper:\n";
-								for (std::size_t j = 0; j != accessHelper.size(); ++j){
-									std::cerr << "\t\tpos: " << j  << " key: ";
-									if (accessHelper[j].has_value()) {
-										std::cerr << keyExtractor(*(accessHelper[j].value())) << '\n';
-									}
-									else {
-										std::cerr << "None\n";
-									}
-								}
-#endif
-
-
-
+							if (accessHelper[h].is_free() ||
+								(accessHelper[h].has_value() && equal(keyExtractor(*(accessHelper[h].value())), key)))
+							{
 								return accessHelper.begin() + h;
 							}
 							h = (h + step) % capacity;
@@ -233,7 +264,9 @@ namespace containers {
 						std::size_t const step {h | 1};
 
 						for (std::size_t i = 0; i != capacity; ++i) {
-							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
+							if (accessHelper[h].is_free() ||
+								(accessHelper[h].has_value() && equal(keyExtractor(*(accessHelper[h].value())), key)))
+							{
 								return accessHelper.cbegin() + h;
 							}
 							h = (h + step) % capacity;
@@ -246,24 +279,30 @@ namespace containers {
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					CIter emplace(MappedType mappedValue){
-						data.emplace_back(std::move(mappedValue));
-						++sz;
-						return std::prev(data.end());
-					}
 
 					CIter insert(MappedType mappedValue){
-						double const currLoadFactor {1.0 * sz / capacity};
+
+						auto emplaceable = [this](AccessCIter iter) -> bool {
+							return iter != accessHelper.end() && iter->is_free();
+						};
+
+						auto place_to_data = [this](MappedType mappedValue) -> CIter {
+							data.emplace_back(std::move(mappedValue));
+							++sz;
+							return std::prev(data.end());
+						};
+
+						double const currLoadFactor {1.0 * (sz + deleted_count) / capacity};
 						if (currLoadFactor > const_values::maxLoadFactor) {
 							rehash();
 						}
-						auto const& key {keyExtractor(mappedValue)};
+						KeyType const& key {keyExtractor(mappedValue)};
 						AccessIter elemIter {getElemIter(key)};
 						if (contains(elemIter)) {
 							return elemIter->value();
 						}
 						else if (emplaceable(elemIter)) {
-							*elemIter = emplace(std::move(mappedValue));
+							elemIter->emplace(place_to_data(std::move(mappedValue)));
 							return elemIter->value();
 						}
 						else {
@@ -275,50 +314,11 @@ namespace containers {
 							if (!emplaceable(elemIter)) {
 								throw std::runtime_error("Unable to emplace after rehash, consider reducing const_values::maxLoadFactor");
 							}
-							*elemIter = emplace(std::move(mappedValue));
+							elemIter->emplace(place_to_data(std::move(mappedValue)));
 							return elemIter->value();
 						}
 					}
 
-#if 0
-					void erase(KeyType const &key) {
-						AccessIter elemIter {getElemIter(key)};
-						if (!contains(elemIter)) {
-							return;
-						}
-						// Начальное смещение
-						data.erase(elemIter->value());
-						/*
-						https://en.cppreference.com/w/cpp/iterator/distance
-						Complexity
-						Linear.
-						However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
-						*/
-						std::size_t h = std::distance(accessHelper.begin(), elemIter);
-						std::size_t step {h | 1};
-
-						// Пока не дошли до конца таблицы и элемент не пустой или ключи не равны
-						while (j < table.size() && (table[j].key == -1 || table[j].key != table[i].key)) {
-							// Если нашли пустую ячейку
-							if (table[j].key == -1) {
-								// Устанавливаем текущую ячейку как пустую и выходим
-								table[i].key = -1;
-								return;
-							}
-							// Переход к следующему элементу с шагом q
-							j += q;
-						}
-
-						// Если найден соответствующий элемент в пределах таблицы
-						if (j < table.size()) {
-							// Перемещаем найденный элемент в текущую позицию
-							table[i] = table[j];
-							// Рекурсивно удаляем перемещённый элемент
-							deleteItem(table, j, q);
-						}
-					}
-#endif
-#if 0
 					void erase(KeyType const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						if (!contains(elemIter)) {
@@ -332,7 +332,7 @@ namespace containers {
 						std::size_t	count           {0};
 
 						auto should_remove = [&, this](){
-							return !accessHelper[curr].has_value();
+							return accessHelper[curr].is_free();
 						};
 						auto should_swap = [&, this](){
 							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
@@ -345,6 +345,9 @@ namespace containers {
 							return hash_curr == hash_prev;
 						};
 						auto should_skip = [&, this](){
+							if (accessHelper[curr].is_deleted()) {
+								return true;
+							}
 							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
 							KeyType const& key_prev {keyExtractor(*(accessHelper[prev].value()))};
 
@@ -355,135 +358,40 @@ namespace containers {
 							if (should_remove()){
 								break;
 							}
+							else if (should_skip()) {
+								curr = (curr + step) % capacity;
+							}
 							else if (should_swap()) {
 								std::swap(accessHelper[curr], accessHelper[prev]);
 								prev = curr;
 								curr = (prev + step) % capacity;
 							}
-							else if (should_skip()) {
-								curr = (curr + step) % capacity;
-							}
 						}
 
 						data.erase(accessHelper[prev].value());
 						accessHelper[prev].reset();
 						--sz;
+						++deleted_count;
 					}//!func
-#endif
-
-#if 1
-					void erase(KeyType const &key) {
-						AccessIter elemIter {getElemIter(key)};
-						if (!contains(elemIter)) {
-							return;
-						}
-
-						std::size_t prev            {static_cast<std::size_t>(elemIter - accessHelper.begin())};
-						std::size_t const h         {hasher(key) % capacity};
-						std::size_t const step      {h | 1};
-						std::size_t	curr            {(prev + step) % capacity};
-						std::size_t	count           {0};
-
-						auto should_iterate = [this](std::size_t const curr_, std::size_t const prev_){
-							if (!accessHelper[curr_].has_value()) {
-								return true;
-							}
-
-							KeyType const& key_curr {keyExtractor(*(accessHelper[curr_].value()))};
-							KeyType const& key_prev {keyExtractor(*(accessHelper[prev_].value()))};
-
-							return key_curr != key_prev;
-						};
-
-						auto remove_idx = [&, this](std::size_t idx){
-							data.erase(accessHelper[idx].value());
-							accessHelper[idx].reset();
-							--sz;
-						};
-
-						auto update_access = [&, this](auto&& self, std::size_t prev_){
-							std::size_t	curr_ {(prev_ + step) % capacity};
-							do {
-								if (!accessHelper[curr_].has_value()) {
-									remove_idx(prev_);
-									return;
-								}
-								curr_ = (prev_ + step) % capacity;
-								prev_ = curr_;
-								++count;
-							} while (should_iterate(curr_, prev_) && count < capacity);
-							std::swap(accessHelper[curr_], accessHelper[prev_]);
-							self(self, curr_);
-						};
-
-						update_access(update_access, prev);
-						data.erase(accessHelper[prev].value());
-						accessHelper[prev].reset();
-						--sz;
-					}//!func
-#endif
-
-
-#if 0
-					void erase(KeyType const &key) {
-						AccessIter elemIter {getElemIter(key)};
-						if (!contains(elemIter)) {
-							return;
-						}
-
-						data.erase(elemIter->value());
-						/*
-						https://en.cppreference.com/w/cpp/iterator/distance
-						Complexity
-						Linear.
-						However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
-						*/
-						std::size_t h = std::distance(accessHelper.begin(), elemIter);
-						std::size_t step {h | 1};
-
-						accessHelper[h].reset();
-						--sz;
-
-						for (std::size_t i = 0; i != capacity; ++i) {
-							h = (h + step) % capacity;
-							if (!accessHelper[h].has_value()) {
-								break;
-							}
-
-							CIter elem {*accessHelper[h]};
-							accessHelper[h].reset();
-
-							std::size_t newH {hasher(keyExtractor(*elem)) % capacity};
-							std::size_t newStep {newH | 1};
-
-							for (std::size_t j = 0; j != capacity; ++j) {
-								if (!accessHelper[newH].has_value()) {
-									accessHelper[newH] = elem;
-									break;
-								}
-								newH = (newH + newStep) % capacity;
-							}
-						}
-					}
-#endif
+					
 					void erase(CIter cIter){
 						auto const& key {keyExtractor(*cIter)};
 						erase(key);
 					}
 
 					void rehash() {
-						std::size_t const new_capacity {capacity * 2u};
+						std::size_t new_capacity {capacity * 2u};
 						AccessHelper newAccessHelper(new_capacity);
 
 						for (auto &entry : accessHelper) {
 							if (entry.has_value()) {
 								std::size_t h {hasher(keyExtractor(*entry.value())) % new_capacity};
-								std::size_t step {h | 1};
+								std::size_t const step {h | 1};
 								bool entryUpdated {false};
 
 								for (std::size_t i = 0; i != new_capacity; ++i) {
-									if (!newAccessHelper[h].has_value()) {
-										newAccessHelper[h] = entry.value();
+									if (newAccessHelper[h].is_free()) {
+										newAccessHelper[h] = entry;
 										entryUpdated = true;
 										break;
 									}
@@ -495,7 +403,8 @@ namespace containers {
 							}
 						}
 						std::swap(accessHelper, newAccessHelper);
-						capacity = new_capacity;
+						std::swap(capacity, new_capacity);
+						deleted_count = 0;
 					}
 
 					bool contains(AccessCIter iter) const {
@@ -505,10 +414,6 @@ namespace containers {
 					bool contains(KeyType const& key) const {
 						AccessCIter iter {getElemIter(key)};
 						return contains(iter);
-					}
-
-					bool emplaceable(AccessCIter iter) const {
-						return iter != accessHelper.end() && !iter->has_value();
 					}
 
 				};
@@ -599,12 +504,13 @@ namespace containers {
 		struct Map final : public details::HashTable<std::pair<Key const, Value>, Hasher, Equal> {
 			using details::HashTable<std::pair<Key const, Value>, Hasher, Equal>::HashTable;
 
-			Value& operator[](Key const& key) {
+			Value& operator[](Key const& key)
+			requires std::default_initializable<Value>
+			{
 				auto found = this->find(key);
 				if (found != this->end()) {
 					return const_cast<Value&>(found->second);
 				}
-				static_assert(std::is_default_constructible_v<Value>, "hash table operator[] requires default constructible Value");
 				auto inserted {this->insert(key, Value{})};
 				return const_cast<Value&>(inserted->second);
 			}

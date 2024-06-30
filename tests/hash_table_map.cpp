@@ -150,14 +150,17 @@ TEST(hash_table_map, iterating_backwards) {
 
 TEST(hash_table_map, no_invalidation) {
 	::containers::hash_table::Map<int, int> hashTable;
-	auto iterBefore {hashTable.insert(-1, 1)};
+	auto* addressBefore {&*(hashTable.insert(-1, 1))};
 	for (int i = 0; i != 1'000'000; ++i) {
 		hashTable.insert(i, 1);
 	}
-	auto iterAfter {hashTable.find(-1)};
-	ASSERT_EQ(iterBefore->first, iterAfter->first);
-	ASSERT_EQ(iterBefore->second, iterAfter->second);
+	auto* addressAfter {&*(hashTable.find(-1))};
+
+	ASSERT_EQ(addressBefore, addressAfter);
 }
+
+
+
 
 TEST(hash_table_map, hash_values_collision) {
 	::containers::hash_table::Map<int, int> hashTable;
@@ -861,7 +864,7 @@ TEST (hash_table_map, hash_values_collision3) {
 
 	/*
 	 * With capacity set to 20
-	 * All of the keys get step for linear probing that is equal to 9
+	 * All of the keys get hash for linear probing that is equal to 9
 	 * therefore four keys occupy 9, 18, 7, 16 slots in vector that keeps data
 	 * then we try to remove the third one, that occupies elem with idx == 7
 	 * then we try ot retrieve fourth pair, that occupies elem with idx == 16
@@ -915,6 +918,7 @@ TEST (hash_table_map, hash_values_collision2) {
 	/*
 	 * Same as previous test, but removing 2nd elem out of 4, instead of
 	 * removing 3rd
+	 * therefore provoking a hash sequence breach
 	 */
 
 	containers::hash_table::Map<int, int> ht(20);
@@ -960,3 +964,84 @@ TEST (hash_table_map, hash_values_collision2) {
 
 }
 
+TEST (hash_table_map, hash_values_collision_sequence_breach1) {
+	/*
+	 * In this test hash sequence breach happens exactly to the reasons of the same hash values
+	 * hash % 20 == 16 has the same idx as hash % 20 == 9 (inserted forth time)
+	 * */
+
+	containers::hash_table::Map<int, int> ht (20);
+	//goes to idx 7
+	ht.insert(std::pair{7, 1});
+	//to 9
+	ht.insert(std::pair{9, 1});
+	//to 16
+	ht.insert(std::pair{16, 1});
+	//to 18
+	ht.insert(std::pair{29, 1});
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5
+	ht.insert(std::pair{49, 1});
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5 but occupied, so to 14
+	ht.insert(std::pair{69, 1});
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5 but occupied, so to 14 but occupied, so to 3
+	ht.insert(std::pair{89, 1});
+
+	ASSERT_EQ(ht.size(), 7u);
+	ht.erase(9);
+	ASSERT_EQ(ht.size(), 6u);
+
+	auto found = ht.find(29);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 29);
+
+	found = ht.find(49);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 49);
+
+	found = ht.find(69);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 69);
+
+	found = ht.find(89);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 89);
+
+	found = ht.find(7);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 7);
+
+	found = ht.find(9);
+	ASSERT_EQ(found, ht.end());
+
+}
+
+
+TEST (hash_table_map, hash_values_collision_sequence_breach2) {
+	/*
+    * In this test hash sequence breach happens because if deletion on intermediate
+    * element - 18
+    * if not processed correctly it would result in being blind for existence
+    * of element 29
+    * */
+
+	containers::hash_table::Map<int, int> ht (20);
+
+	ht.insert(std::pair{18, 1});
+	ht.insert(std::pair{9, 1});
+	ht.insert(std::pair{29, 1});
+
+	ASSERT_EQ(ht.size(), 3u);
+	ht.erase(18);
+	ASSERT_EQ(ht.size(), 2u);
+
+	auto found = ht.find(9);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 9);
+
+	found = ht.find(29);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(found->first, 29);
+
+	found = ht.find(18);
+	ASSERT_EQ(found, ht.end());
+}

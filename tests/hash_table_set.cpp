@@ -144,12 +144,14 @@ TEST(hash_table_set, iterating_backwards) {
 
 TEST(hash_table_set, no_invalidation) {
 	::containers::hash_table::Set<int> hashTable;
-	auto iterBefore {hashTable.insert(-1)};
+	auto* addressBefore {&*(hashTable.insert(-1))};
+
 	for (int i = 0; i != 1'000'000; ++i) {
 		hashTable.insert(i);
 	}
-	auto iterAfter {hashTable.find(-1)};
-	ASSERT_EQ(*iterBefore, *iterAfter);
+	auto* addressAfter {&*(hashTable.find(-1))};
+
+	ASSERT_EQ(addressBefore, addressAfter);
 }
 
 TEST(hash_table_set, hash_values_collision1) {
@@ -261,4 +263,87 @@ TEST (hash_table_set, hash_values_collision2) {
 
 	found = ht.find(428606529);
 	ASSERT_NE(found, ht.end());
+}
+
+
+TEST (hash_table_set, hash_values_collision_sequence_breach1) {
+	/*
+	 * In this test hash sequence breach happens exactly to the reasons of the same hash values
+	 * hash % 20 == 16 has the same idx as hash % 20 == 9 (inserted forth time)
+	 * */
+
+	containers::hash_table::Set<int> ht (20);
+	//goes to idx 7
+	ht.insert(7);
+	//to 9
+	ht.insert(9);
+	//to 16
+	ht.insert(16);
+	//to 18
+	ht.insert(29);
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5
+	ht.insert(49);
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5 but occupied, so to 14
+	ht.insert(69);
+	//should've gone to 7 but occupied, so to 16 but occupied, so to 5 but occupied, so to 14 but occupied, so to 3
+	ht.insert(89);
+
+	ASSERT_EQ(ht.size(), 7u);
+	ht.erase(9);
+	ASSERT_EQ(ht.size(), 6u);
+
+	auto found = ht.find(29);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 29);
+
+	found = ht.find(49);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 49);
+
+	found = ht.find(69);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 69);
+
+	found = ht.find(89);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 89);
+
+	found = ht.find(7);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 7);
+
+	found = ht.find(9);
+	ASSERT_EQ(found, ht.end());
+
+}
+
+
+TEST (hash_table_set, hash_values_collision_sequence_breach2) {
+	/*
+    * In this test hash sequence breach happens because if deletion on intermediate
+    * element - 18
+    * if not processed correctly it would result in being blind for existence
+    * of element 29
+    * */
+
+	containers::hash_table::Set<int> ht (20);
+
+	ht.insert(18);
+	ht.insert(9);
+	ht.insert(29);
+
+	ASSERT_EQ(ht.size(), 3u);
+	ht.erase(18);
+	ASSERT_EQ(ht.size(), 2u);
+
+	auto found = ht.find(9);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 9);
+
+	found = ht.find(29);
+	ASSERT_NE(found, ht.end());
+	ASSERT_EQ(*found, 29);
+
+	found = ht.find(18);
+	ASSERT_EQ(found, ht.end());
 }
