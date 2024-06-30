@@ -1,4 +1,4 @@
-## Hash table with no invalidation of pointers and iterators
+## Hash table with *NO* invalidation of pointers and iterators
 
 ### Rational
 Another project of mine required a **hash table that never invalidates** its pointers and iterators. I made one in the hope that it would be on par with `std::unordered`. Header only, single C++20 file, see ./include folder. See ./tests as usage examples.
@@ -28,7 +28,7 @@ Erase containers::hash_table::Set     /min_time:5.000      0.029 us        0.029
 
 * It is allowed to throw, you are the one who should catch. 
 
-* Indeed, to nail down all the data, one should use a linked list. The problem is that random memory placement turns out to be bad for cache locality. 
+* Indeed, to nail down all the data, hash table should use a linked list as an underlying structure. The problem is that random memory placement turns out to be bad for cache locality. 
 But thanks to [Bloomberg](https://github.com/bloomberg) and their contribution to committee work, we have `std:pmr` namespace and polymorphic allocators.
 Long story short, this hash table is built upon `std::pmr::list` that allows to place list nodes in memory in an array-like fashion, thus making such a container more cache-friendly.
 
@@ -38,3 +38,6 @@ Long story short, this hash table is built upon `std::pmr::list` that allows to 
 
 ### License
 MIT
+
+### Disclosure
+Despite heavy testing performed (see ./tests/test_11.txt), no guarantees of any kind are given whatsoever. Use it at your own risk.

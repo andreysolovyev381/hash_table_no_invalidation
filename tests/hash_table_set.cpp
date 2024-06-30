@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "../include/hash_table.hpp"
-#if 0
+
 TEST(hash_table_set, empty) {
 	::containers::hash_table::Set<int> hashTable;
 	bool empty = hashTable.empty();
@@ -54,7 +54,7 @@ TEST(hash_table_set, insert) {
 }
 
 TEST(hash_table_set, erase) {
-	::containers::hash_table::Set<int> hashTable;
+	::containers::hash_table::Set<int> hashTable(10);
 	hashTable.insert(1);
 	hashTable.insert(2);
 	hashTable.insert(17);
@@ -163,43 +163,44 @@ TEST(hash_table_set, hash_values_collision1) {
 	ASSERT_EQ(hashTable.size(), 1u);
 }
 
-TEST (hash_table_set, hash_values_collision2) {
+TEST (hash_table_set, hash_values_collision3) {
 
 	/*
+	 * With capacity set to 20
 	 * All of the keys get step for linear probing that is equal to 9
 	 * therefore four keys occupy 9, 18, 7, 16 slots in vector that keeps data
 	 * then we try to remove the third one, that occupies elem with idx == 7
 	 * then we try ot retrieve fourth pair, that occupies elem with idx == 16
 	 */
 
-	containers::hash_table::Set<int> ht;
+	containers::hash_table::Set<int> ht(20);
 
 	auto found = ht.find(79477009);
 	ASSERT_EQ(found, ht.end());
 	ht.insert(79477009);
 	ASSERT_EQ(ht.size(), 1u);
-	auto found = ht.find(79477009);
+	found = ht.find(79477009);
 	ASSERT_NE(found, ht.end());
 
-	auto found = ht.find(-614266467);
+	found = ht.find(-614266467);
 	ASSERT_EQ(found, ht.end());
 	ht.insert(-614266467);
 	ASSERT_EQ(ht.size(), 2u);
-	auto found = ht.find(-614266467);
+	found = ht.find(-614266467);
 	ASSERT_NE(found, ht.end());
 
-	auto found = ht.find(401991289);
+	found = ht.find(401991289);
 	ASSERT_EQ(found, ht.end());
 	ht.insert(401991289);
 	ASSERT_EQ(ht.size(), 3u);
-	auto found = ht.find(401991289);
+	found = ht.find(401991289);
 	ASSERT_NE(found, ht.end());
 
-	auto found = ht.find(428606529);
+	found = ht.find(428606529);
 	ASSERT_EQ(found, ht.end());
 	ht.insert(428606529);
 	ASSERT_EQ(ht.size(), 4u);
-	auto found = ht.find(428606529);
+	found = ht.find(428606529);
 	ASSERT_NE(found, ht.end());
 
 	found = ht.find(401991289);
@@ -212,4 +213,52 @@ TEST (hash_table_set, hash_values_collision2) {
 	found = ht.find(428606529);
 	ASSERT_NE(found, ht.end());
 }
-#endif
+
+
+TEST (hash_table_set, hash_values_collision2) {
+
+	/*
+	 * Same as previous test, but removing 2nd elem out of 4, instead of
+	 * removing 3rd
+	 */
+
+	containers::hash_table::Set<int> ht(20);
+
+	auto found = ht.find(79477009);
+	ASSERT_EQ(found, ht.end());
+	ht.insert(79477009);
+	ASSERT_EQ(ht.size(), 1u);
+	found = ht.find(79477009);
+	ASSERT_NE(found, ht.end());
+
+	found = ht.find(-614266467);
+	ASSERT_EQ(found, ht.end());
+	ht.insert(-614266467);
+	ASSERT_EQ(ht.size(), 2u);
+	found = ht.find(-614266467);
+	ASSERT_NE(found, ht.end());
+
+	found = ht.find(401991289);
+	ASSERT_EQ(found, ht.end());
+	ht.insert(401991289);
+	ASSERT_EQ(ht.size(), 3u);
+	found = ht.find(401991289);
+	ASSERT_NE(found, ht.end());
+
+	found = ht.find(428606529);
+	ASSERT_EQ(found, ht.end());
+	ht.insert(428606529);
+	ASSERT_EQ(ht.size(), 4u);
+	found = ht.find(428606529);
+	ASSERT_NE(found, ht.end());
+
+	found = ht.find(-614266467);
+	ASSERT_NE(found, ht.end());
+	ht.erase(found);
+	found = ht.find(-614266467);
+	ASSERT_EQ(found, ht.end());
+	ASSERT_EQ(ht.size(), 3u);
+
+	found = ht.find(428606529);
+	ASSERT_NE(found, ht.end());
+}

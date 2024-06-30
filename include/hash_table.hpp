@@ -199,32 +199,25 @@ namespace containers {
 
 					AccessIter getElemIter(KeyType const &key) {
 						std::size_t h {hasher(key) % capacity};
-						std::size_t step {h | 1};
+						std::size_t const step {h | 1};
 
-						
-
-std::cerr << "key: " << key << "; step: " << h << '\n'; //todo remove
-
-
-
-//9 18 7 16
 						for (std::size_t i = 0; i != capacity; ++i) {
 							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
 
+
+
+#if 0
 								std::cerr << "\tPrinting AccessHelper:\n";
 								for (std::size_t j = 0; j != accessHelper.size(); ++j){
-									std::cerr << "\t\tpos: " << j << " value: ";
+									std::cerr << "\t\tpos: " << j  << " key: ";
 									if (accessHelper[j].has_value()) {
-										std::cerr
-												<< "{key: " << (*(accessHelper[j].value())).first
-												<< ", value: " << (*(accessHelper[j].value())).second << "}"
-												<< '\n';
+										std::cerr << keyExtractor(*(accessHelper[j].value())) << '\n';
 									}
 									else {
 										std::cerr << "None\n";
 									}
 								}
-
+#endif
 
 
 
@@ -237,8 +230,7 @@ std::cerr << "key: " << key << "; step: " << h << '\n'; //todo remove
 
 					AccessCIter getElemIter(KeyType const &key) const {
 						std::size_t h {hasher(key) % capacity};
-						std::size_t step {h};
-						step |= 1;
+						std::size_t const step {h | 1};
 
 						for (std::size_t i = 0; i != capacity; ++i) {
 							if (!accessHelper[h].has_value() || equal(keyExtractor(*(accessHelper[h].value())), key)) {
@@ -288,6 +280,151 @@ std::cerr << "key: " << key << "; step: " << h << '\n'; //todo remove
 						}
 					}
 
+#if 0
+					void erase(KeyType const &key) {
+						AccessIter elemIter {getElemIter(key)};
+						if (!contains(elemIter)) {
+							return;
+						}
+						// Начальное смещение
+						data.erase(elemIter->value());
+						/*
+						https://en.cppreference.com/w/cpp/iterator/distance
+						Complexity
+						Linear.
+						However, if InputIt additionally meets the requirements of LegacyRandomAccessIterator, complexity is constant.
+						*/
+						std::size_t h = std::distance(accessHelper.begin(), elemIter);
+						std::size_t step {h | 1};
+
+						// Пока не дошли до конца таблицы и элемент не пустой или ключи не равны
+						while (j < table.size() && (table[j].key == -1 || table[j].key != table[i].key)) {
+							// Если нашли пустую ячейку
+							if (table[j].key == -1) {
+								// Устанавливаем текущую ячейку как пустую и выходим
+								table[i].key = -1;
+								return;
+							}
+							// Переход к следующему элементу с шагом q
+							j += q;
+						}
+
+						// Если найден соответствующий элемент в пределах таблицы
+						if (j < table.size()) {
+							// Перемещаем найденный элемент в текущую позицию
+							table[i] = table[j];
+							// Рекурсивно удаляем перемещённый элемент
+							deleteItem(table, j, q);
+						}
+					}
+#endif
+#if 0
+					void erase(KeyType const &key) {
+						AccessIter elemIter {getElemIter(key)};
+						if (!contains(elemIter)) {
+							return;
+						}
+
+						std::size_t prev            {static_cast<std::size_t>(elemIter - accessHelper.begin())};
+						std::size_t const h         {hasher(key) % capacity};
+						std::size_t const step      {h | 1};
+						std::size_t	curr            {(prev + step) % capacity};
+						std::size_t	count           {0};
+
+						auto should_remove = [&, this](){
+							return !accessHelper[curr].has_value();
+						};
+						auto should_swap = [&, this](){
+							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
+							std::size_t const hash_curr {hasher(key_curr) % capacity};
+
+							//was calculated before
+							KeyType const& key_prev {keyExtractor(*(accessHelper[prev].value()))};
+							std::size_t const hash_prev {hasher(key_prev) % capacity};
+
+							return hash_curr == hash_prev;
+						};
+						auto should_skip = [&, this](){
+							KeyType const& key_curr {keyExtractor(*(accessHelper[curr].value()))};
+							KeyType const& key_prev {keyExtractor(*(accessHelper[prev].value()))};
+
+							return hasher(key_curr) != hasher(key_prev);
+						};
+
+						for (; count != capacity; ++count){
+							if (should_remove()){
+								break;
+							}
+							else if (should_swap()) {
+								std::swap(accessHelper[curr], accessHelper[prev]);
+								prev = curr;
+								curr = (prev + step) % capacity;
+							}
+							else if (should_skip()) {
+								curr = (curr + step) % capacity;
+							}
+						}
+
+						data.erase(accessHelper[prev].value());
+						accessHelper[prev].reset();
+						--sz;
+					}//!func
+#endif
+
+#if 1
+					void erase(KeyType const &key) {
+						AccessIter elemIter {getElemIter(key)};
+						if (!contains(elemIter)) {
+							return;
+						}
+
+						std::size_t prev            {static_cast<std::size_t>(elemIter - accessHelper.begin())};
+						std::size_t const h         {hasher(key) % capacity};
+						std::size_t const step      {h | 1};
+						std::size_t	curr            {(prev + step) % capacity};
+						std::size_t	count           {0};
+
+						auto should_iterate = [this](std::size_t const curr_, std::size_t const prev_){
+							if (!accessHelper[curr_].has_value()) {
+								return true;
+							}
+
+							KeyType const& key_curr {keyExtractor(*(accessHelper[curr_].value()))};
+							KeyType const& key_prev {keyExtractor(*(accessHelper[prev_].value()))};
+
+							return key_curr != key_prev;
+						};
+
+						auto remove_idx = [&, this](std::size_t idx){
+							data.erase(accessHelper[idx].value());
+							accessHelper[idx].reset();
+							--sz;
+						};
+
+						auto update_access = [&, this](auto&& self, std::size_t prev_){
+							std::size_t	curr_ {(prev_ + step) % capacity};
+							do {
+								if (!accessHelper[curr_].has_value()) {
+									remove_idx(prev_);
+									return;
+								}
+								curr_ = (prev_ + step) % capacity;
+								prev_ = curr_;
+								++count;
+							} while (should_iterate(curr_, prev_) && count < capacity);
+							std::swap(accessHelper[curr_], accessHelper[prev_]);
+							self(self, curr_);
+						};
+
+						update_access(update_access, prev);
+						data.erase(accessHelper[prev].value());
+						accessHelper[prev].reset();
+						--sz;
+					}//!func
+#endif
+
+
+#if 0
 					void erase(KeyType const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						if (!contains(elemIter)) {
@@ -328,7 +465,7 @@ std::cerr << "key: " << key << "; step: " << h << '\n'; //todo remove
 							}
 						}
 					}
-
+#endif
 					void erase(CIter cIter){
 						auto const& key {keyExtractor(*cIter)};
 						erase(key);
