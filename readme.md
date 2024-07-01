@@ -1,7 +1,7 @@
 ## Hash table with *NO* invalidation of pointers and iterators
 
 ### Rational
-Another project of mine required a **hash table that never invalidates** its pointers and iterators. I made one in the hope that it would be on par with `std::unordered`. Header only, single C++20 file, see ./include folder. See ./tests for more detailed usage examples. In general, it reproduces `std::unordered` interface.
+Another project of mine required a **hash table that never invalidates** its pointers and iterators. I made one with a humble hope to be on par with `std::unordered`. Header only, single C++20 file, see ./include folder. See ./tests for more detailed usage examples. In general, more or less it reproduces `std::unordered` interface.
 
 ### Short usage example
 ```cpp
@@ -30,11 +30,11 @@ Here are the results for 1 million ints.
 ------------------------------------------------------------------------------------------------
 Benchmark                                                      Time             CPU   Iterations
 ------------------------------------------------------------------------------------------------
-Insertion std::unordered_set          /min_time:5.000      0.169 us        0.165 us     35291426
-Insertion containers::hash_table::Set /min_time:5.000      0.133 us        0.128 us     53189364
-Access std::unordered_set             /min_time:5.000      0.077 us        0.074 us     97083641
-Access containers::hash_table::Set    /min_time:5.000      0.065 us        0.065 us    107453296
-Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    613731931
+Insertion std::unordered_set          /min_time:5.000      0.144 us        0.143 us     50408238
+Insertion containers::hash_table::Set /min_time:5.000      0.129 us        0.128 us     53205182
+Access std::unordered_set             /min_time:5.000      0.072 us        0.072 us     96885052
+Access containers::hash_table::Set    /min_time:5.000      0.067 us        0.066 us    105449693
+Erase std::unordered_set              /min_time:5.000      0.009 us        0.009 us    618141538
 Erase containers::hash_table::Set     /min_time:5.000      0.089 us        0.089 us     69120837
 
 ```

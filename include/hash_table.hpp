@@ -315,48 +315,43 @@ namespace containers {
 						}
 
 						std::size_t idx_curr        {static_cast<std::size_t>(elemIter - accessHelper.begin())};
-						std::size_t const h         {hasher(key) % capacity};
-						std::size_t const step      {h | 1};
+						std::size_t hash_curr       {hasher(key)};
+						std::size_t const step      {(hash_curr % capacity) | 1};
 						std::size_t	idx_next        {(idx_curr + step) % capacity};
-						std::size_t	count           {0};
 
-						auto should_remove = [&, this](){
-							return accessHelper[idx_next].is_free();
-						};
-						auto should_swap = [&, this](){
-							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
-							std::size_t const hash_next {hasher(key_next) % capacity};
-
-							//was calculated before
-							KeyType const& key_curr {keyExtractor(*(accessHelper[idx_curr].value()))};
-							std::size_t const hash_curr {hasher(key_curr) % capacity};
-
-							return hash_next == hash_curr;
-						};
-						auto should_skip = [&, this](){
-							if (accessHelper[idx_next].is_deleted()) {
-								return true;
-							}
-							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
-							KeyType const& key_curr {keyExtractor(*(accessHelper[idx_curr].value()))};
-
-							return hasher(key_next) != hasher(key_curr);
-						};
-
-						for (; count != capacity; ++count){
-							if (should_remove()){
+						//we shouldn't perform more iterations, then capacity we have
+						for (std::size_t count = 0; count != capacity; ++count){
+							//should remove, next elem is free, we are at the end of hash sequence
+							if (accessHelper[idx_next].is_free()){
 								break;
 							}
-							else if (should_skip()) {
+							//should skip because next element was deleted before
+							else if (accessHelper[idx_next].is_deleted()) {
 								idx_next = (idx_next + step) % capacity;
+								continue;
 							}
-							else if (should_swap()) {
+							//at this point we know that both values are presented
+							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
+							std::size_t hash_next   {hasher(key_next)};
+
+							//should skip as it is collision of placement, hashes are different (ie 18 and 9)
+							if (hash_next != hash_curr) {
+								idx_next = (idx_next + step) % capacity;
+								continue;
+							}
+							//else finally we should swap
+							else {
 								std::swap(accessHelper[idx_next], accessHelper[idx_curr]);
+
+								//keep it for next iteration
+								hash_curr = hash_next;
 								idx_curr = idx_next;
+
 								idx_next = (idx_curr + step) % capacity;
 							}
 						}
 
+						//deleting element at the end of hash sequence
 						data.erase(accessHelper[idx_curr].value());
 						accessHelper[idx_curr].reset();
 						--sz;
@@ -374,7 +369,7 @@ namespace containers {
 
 						for (auto &entry : accessHelper) {
 							if (entry.has_value()) {
-								std::size_t h {hasher(keyExtractor(*entry.value())) % new_capacity};
+								std::size_t h {hasher(keyExtractor(*(entry.value()))) % new_capacity};
 								std::size_t const step {h | 1};
 								bool entryUpdated {false};
 

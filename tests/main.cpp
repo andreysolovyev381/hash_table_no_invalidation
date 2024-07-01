@@ -13,6 +13,5 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
 
 //todo
 // add initializer list to insert
-// erase must be optimized
 // currently find() returns const object
-// capacity should create data elements, not just access vector
+// capacity should create data elements, not just access vector?
