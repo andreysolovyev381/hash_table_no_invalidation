@@ -42,10 +42,6 @@ namespace requirements {
 
 		template <typename Type, typename MaybeComparator>
 		concept IsComparator = requires() {
-			requires std::is_invocable_r_v<
-					bool,
-					MaybeComparator,
-					std::add_const_t<std::decay_t<Type>>, std::add_const_t<std::decay_t<Type>>>;
 			requires std::is_same_v <
 					std::invoke_result_t<MaybeComparator, std::add_const_t<std::decay_t<Type>>, std::add_const_t<std::decay_t<Type>>>,
 					bool > ;
