@@ -1,5 +1,4 @@
 set(TESTS_NAME hash_table_tests)
-set(CMAKE_CXX_STANDARD 20)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(
@@ -21,7 +20,6 @@ add_compile_options(
         -Werror
 )
 
-
 find_package(GTest REQUIRED)
 if(GTest_FOUND)
     message(STATUS "TESTS FOUND: including and linking...")
@@ -31,7 +29,6 @@ else()
 endif()
 
 add_executable(${TESTS_NAME}
-#        ./hash_table_element.cpp
         ./hash_table_set.cpp
         ./hash_table_map.cpp
         ./pmr.cpp
@@ -40,6 +37,7 @@ add_executable(${TESTS_NAME}
 target_compile_definitions(${TESTS_NAME} PUBLIC CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(${TESTS_NAME}
         GTest::GTest
+        pthread
 )
 target_compile_options(${TESTS_NAME}
         PRIVATE

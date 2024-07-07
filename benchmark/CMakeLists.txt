@@ -1,5 +1,4 @@
 set(EXECUTABLE_NAME hash_table_benchmark)
-set(CMAKE_CXX_STANDARD 20)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(

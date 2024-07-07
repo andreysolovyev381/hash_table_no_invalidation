@@ -67,12 +67,45 @@ namespace containers {
 
 	namespace pmr {
 
+		template <std::size_t Alignment>
+		class AlignedMemoryResource : public std::pmr::memory_resource {
+		public:
+			explicit AlignedMemoryResource(std::pmr::memory_resource* upstream)
+					: upstream_resource(upstream) {}
+
+		protected:
+			void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+				alignment = std::max(alignment, Alignment);
+				void* p = upstream_resource->allocate(bytes, alignment);
+				if (!p) {
+					throw std::bad_alloc();
+				}
+				return p;
+			}
+
+			void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override {
+				upstream_resource->deallocate(p, bytes, alignment);
+			}
+
+			bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+				const auto* other_ptr = dynamic_cast<const AlignedMemoryResource*>(&other);
+				return other_ptr && upstream_resource->is_equal(*other_ptr->upstream_resource);
+			}
+		private:
+			std::pmr::memory_resource* upstream_resource;
+		};
+
 		static inline std::pmr::synchronized_pool_resource resource(std::pmr::get_default_resource());
 
 		using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
 
-		//	usage example
-		//	std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
+//		usage example
+//		std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
+
+//		pmr::AlignedMemoryResource<(sizeof(T) < 24 ? sizeof(T) : 24)> aligned_resource;
+//		aligned_resource(&pmr::resource);
+//		std::pmr::list<int> l(pmr::allocator_type{&aligned_resource});
+
 
 	}//!namespace details::pmr
 
