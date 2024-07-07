@@ -32,6 +32,7 @@ add_executable(${TESTS_NAME}
         ./hash_table_set.cpp
         ./hash_table_map.cpp
         ./pmr.cpp
+        ./requirements.cpp
         ./main.cpp
 )
 target_compile_definitions(${TESTS_NAME} PUBLIC CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
