@@ -479,21 +479,21 @@ namespace containers {
 
 				bool empty() const{ return access.sz == 0u; }
 
-				Iter begin() { return data.begin(); }
+				CIter begin() const { return data.cbegin(); }
 
-				Iter end() { return data.end(); }
+				CIter end() const { return data.cend(); }
 
-				CIter cbegin() const{ return data.cbegin(); }
+				CIter cbegin() const { return data.cbegin(); }
 
-				CIter cend() const{ return data.cend(); }
+				CIter cend() const { return data.cend(); }
 
-				CRIter rbegin() const{ return data.crbegin(); }
+				CRIter rbegin() const { return data.crbegin(); }
 
-				CRIter rend() const{ return data.crend(); }
+				CRIter rend() const { return data.crend(); }
 
-				CRIter crbegin() const{ return data.crbegin(); }
+				CRIter crbegin() const { return data.crbegin(); }
 
-				CRIter crend() const{ return data.crend(); }
+				CRIter crend() const { return data.crend(); }
 
 			private:
 				Data data;
