@@ -142,7 +142,7 @@ TEST(hash_table_set, elem_ptr) {
 	hashTable.insert(2);
 	hashTable.insert(17);
 	auto ptr2 = hashTable.insert(1);
-	ASSERT_EQ(ptr1, ptr2);
+	ASSERT_EQ(ptr1.first, ptr2.first);
 }
 
 TEST(hash_table_set, iterating_forward) {
@@ -171,7 +171,8 @@ TEST(hash_table_set, iterating_backwards) {
 
 TEST(hash_table_set, no_invalidation) {
 	::containers::hash_table::Set<int> hashTable;
-	auto* addressBefore {&*(hashTable.insert(-1))};
+	auto [it, _] {(hashTable.insert(-1))};
+	auto* addressBefore {&*it};
 
 	for (int i = 0; i != 1'000'000; ++i) {
 		hashTable.insert(i);

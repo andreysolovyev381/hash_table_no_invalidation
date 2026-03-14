@@ -207,6 +207,10 @@ namespace containers {
 				using CIter = typename Data::const_iterator;
 				using CRIter = typename Data::const_reverse_iterator;
 
+				using iterator = typename decltype(getIterType())::type;
+				using const_iterator = typename Data::const_iterator;
+				using const_reverse_iterator = typename Data::const_reverse_iterator;
+
 			private:
 
 				template <std::input_iterator IterType>
@@ -252,25 +256,25 @@ namespace containers {
 					KeyExtractor keyExtractor;
 
 					explicit Access(Data &data)
-							: data(data)
-							, capacity {sizeof(MappedType) > const_values::max_type_sizeof ?
-										1 :
-										const_values::initial_capacity}
-							, sz {0}
-							, deleted_count{0}
+						: data(data)
+						, capacity {sizeof(MappedType) > const_values::max_type_sizeof ? 1 : const_values::initial_capacity}
+						, sz {0}
+						, deleted_count{0}
 					{
 						accessHelper.resize(capacity);
 					}
 
 					explicit Access(Data &data, std::size_t capacity)
-							: data(data)
-							, capacity {capacity == 0 ?
-										sizeof(MappedType) > const_values::max_type_sizeof ?
-											1 :
-											const_values::initial_capacity
-										: capacity}
-							, sz {0}
-							, deleted_count{0}
+						: data(data)
+						, capacity 
+							{capacity == 0 ? 
+								sizeof(MappedType) > const_values::max_type_sizeof ? 
+									1 : 
+									const_values::initial_capacity : 
+								capacity
+							}
+						, sz {0}
+						, deleted_count{0}
 					{
 						accessHelper.resize(capacity);
 					}
@@ -310,7 +314,7 @@ namespace containers {
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					CIter insert(MappedType mappedValue){
+					std::pair<CIter, bool> insert(MappedType mappedValue){
 
 						auto emplaceable = [this](AccessCIter iter) -> bool {
 							return iter != accessHelper.end() && iter->is_free();
@@ -329,11 +333,11 @@ namespace containers {
 						KeyType const& key {keyExtractor(mappedValue)};
 						AccessIter elemIter {getElemIter(key)};
 						if (contains(elemIter)) {
-							return elemIter->value();
+							return {elemIter->value(), false};
 						}
 						else if (emplaceable(elemIter)) {
 							elemIter->emplace(place_to_data(std::move(mappedValue)));
-							return elemIter->value();
+							return {elemIter->value(), true};
 						}
 						else {
 							int attempts {const_values::maxEmplaceAttempts};
@@ -345,7 +349,7 @@ namespace containers {
 								throw std::runtime_error("Unable to emplace after rehash, consider reducing const_values::maxLoadFactor");
 							}
 							elemIter->emplace(place_to_data(std::move(mappedValue)));
-							return elemIter->value();
+							return {elemIter->value(), true};
 						}
 					}
 
@@ -525,7 +529,7 @@ namespace containers {
 
 				template<typename... Args>
 				requires std::constructible_from<MappedType, Args...>
-				CIter insert(Args&&... args){
+				std::pair<CIter, bool> insert(Args&&... args) {
 					return access.insert(MappedType(std::forward<Args>(args)...));
 				}
 
@@ -594,7 +598,7 @@ namespace containers {
 				if (found != this->end()) {
 					return const_cast<Value&>(found->second);
 				}
-				auto inserted {this->insert(key, Value{})};
+				auto [inserted, ok] {this->insert(key, Value{})};
 				return const_cast<Value&>(inserted->second);
 			}
 		};
