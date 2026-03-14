@@ -214,7 +214,7 @@ namespace containers {
 			private:
 
 				template <std::input_iterator IterType>
-				struct Element {
+				struct Element final {
 
 					struct Deleted{};
 
@@ -240,7 +240,7 @@ namespace containers {
 
 				};
 
-				struct Access {
+				struct Access final {
 					using AccessHelper = typename std::vector<Element<CIter>>;
 					using AccessIter = typename AccessHelper::iterator;
 					using AccessCIter = typename AccessHelper::const_iterator;
@@ -526,6 +526,8 @@ namespace containers {
 				HashTable(HashTable &&) = default;
 
 				HashTable& operator=(HashTable &&) = default;
+				
+				~HashTable() = default;
 
 				template<typename... Args>
 				requires std::constructible_from<MappedType, Args...>
