@@ -5,6 +5,33 @@
 #include <gtest/gtest.h>
 #include "../include/hash_table.hpp"
 
+TEST(hash_table_set_copy_ctor, SetVariant) {
+    ::containers::hash_table::Set<int> original;
+    original.insert(1);
+    original.insert(2);
+    original.insert(3);
+
+    ::containers::hash_table::Set<int> copy(original);
+
+    EXPECT_EQ(copy.size(), 3u);
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_TRUE(copy.contains(2));
+    EXPECT_TRUE(copy.contains(3));
+}
+
+TEST(hash_table_set_copy_ctor, SetVariant_Independence) {
+    ::containers::hash_table::Set<int> original;
+    original.insert(1);
+
+    ::containers::hash_table::Set<int> copy(original);
+    copy.insert(2);
+    original.erase(1);
+
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_FALSE(original.contains(1));
+    EXPECT_FALSE(copy.contains(2) && original.contains(2));
+}
+
 TEST(hash_table_set, empty) {
 	::containers::hash_table::Set<int> hashTable;
 	bool empty = hashTable.empty();

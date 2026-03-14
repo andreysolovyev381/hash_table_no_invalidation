@@ -9,6 +9,251 @@
 #include <fstream>
 #include <string>
 
+TEST(hash_table_map_copy_ctor, EmptyTable) {
+	
+    ::containers::hash_table::Map<int, int> original;
+    ::containers::hash_table::Map<int, int> copy(original);
+
+    EXPECT_EQ(copy.size(), 0u);
+    EXPECT_TRUE(copy.empty());
+}
+
+TEST(hash_table_map_copy_ctor, SizeAndContents) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+    original.insert(3, 30);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+
+    EXPECT_EQ(copy.size(), 3u);
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_TRUE(copy.contains(2));
+    EXPECT_TRUE(copy.contains(3));
+}
+
+TEST(hash_table_map_copy_ctor, ValuesAreCorrect) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 42);
+    original.insert(2, 99);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+
+    EXPECT_EQ(copy.find(1)->second, 42);
+    EXPECT_EQ(copy.find(2)->second, 99);
+}
+
+TEST(hash_table_map_copy_ctor, Independence_InsertIntoOriginal) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+    original.insert(2, 20);
+
+    EXPECT_FALSE(copy.contains(2));
+    EXPECT_EQ(copy.size(), 1u);
+}
+
+TEST(hash_table_map_copy_ctor, Independence_InsertIntoCopy) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+    copy.insert(2, 20);
+
+    EXPECT_FALSE(original.contains(2));
+    EXPECT_EQ(original.size(), 1u);
+}
+
+TEST(hash_table_map_copy_ctor, Independence_EraseFromOriginal) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+    original.erase(1);
+
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_EQ(copy.size(), 2u);
+}
+
+TEST(hash_table_map_copy_ctor, Independence_EraseFromCopy) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+    copy.erase(1);
+
+    EXPECT_TRUE(original.contains(1));
+    EXPECT_EQ(original.size(), 2u);
+}
+
+TEST(hash_table_map_copy_ctor, IteratorsAreValid) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+    original.insert(3, 30);
+
+    ::containers::hash_table::Map<int, int> copy(original);
+
+    std::size_t count = 0;
+    for (auto it = copy.cbegin(); it != copy.cend(); ++it, ++count);
+
+    EXPECT_EQ(count, 3u);
+}
+
+TEST(hash_table_map_copy_assign, EmptyToEmpty) {
+    ::containers::hash_table::Map<int, int> original;
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 0u);
+    EXPECT_TRUE(copy.empty());
+}
+
+TEST(hash_table_map_copy_assign, PopulatedToEmpty) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 2u);
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_TRUE(copy.contains(2));
+}
+
+TEST(hash_table_map_copy_assign, EmptyToPopulated) {
+    ::containers::hash_table::Map<int, int> original;
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy.insert(1, 10);
+    copy.insert(2, 20);
+
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 0u);
+    EXPECT_TRUE(copy.empty());
+}
+
+TEST(hash_table_map_copy_assign, OverwritesExistingContent) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(10, 100);
+    original.insert(20, 200);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy.insert(1, 10);
+    copy.insert(2, 20);
+    copy.insert(3, 30);
+
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 2u);
+    EXPECT_TRUE(copy.contains(10));
+    EXPECT_TRUE(copy.contains(20));
+    EXPECT_FALSE(copy.contains(1));
+    EXPECT_FALSE(copy.contains(2));
+    EXPECT_FALSE(copy.contains(3));
+}
+
+TEST(hash_table_map_copy_assign, ValuesAreCorrect) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(5, 55);
+    original.insert(6, 66);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    EXPECT_EQ(copy.find(5)->second, 55);
+    EXPECT_EQ(copy.find(6)->second, 66);
+}
+
+TEST(hash_table_map_copy_assign, SelfAssignment) {
+    ::containers::hash_table::Map<int, int> table;
+    table.insert(1, 10);
+    table.insert(2, 20);
+
+    table = table;
+
+    EXPECT_EQ(table.size(), 2u);
+    EXPECT_TRUE(table.contains(1));
+    EXPECT_TRUE(table.contains(2));
+}
+
+TEST(hash_table_map_copy_assign, Independence_InsertAfterAssign) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    copy.insert(2, 20);
+    original.insert(3, 30);
+
+    EXPECT_FALSE(copy.contains(3));
+    EXPECT_FALSE(original.contains(2));
+}
+
+TEST(hash_table_map_copy_assign, Independence_EraseAfterAssign) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    copy.erase(1);
+    EXPECT_TRUE(original.contains(1));
+
+    original.erase(2);
+    EXPECT_TRUE(copy.contains(2));
+}
+
+TEST(hash_table_map_copy_assign, IteratorsAreValid) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    std::size_t count = 0;
+    for (auto it = copy.cbegin(); it != copy.cend(); ++it, ++count);
+
+    EXPECT_EQ(count, 2u);
+}
+
+TEST(hash_table_map_copy_assign, WithDeletedSlots) {
+    ::containers::hash_table::Map<int, int> original;
+    original.insert(1, 10);
+    original.insert(2, 20);
+    original.insert(3, 30);
+    original.erase(2);
+
+    ::containers::hash_table::Map<int, int> copy;
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 2u);
+    EXPECT_TRUE(copy.contains(1));
+    EXPECT_FALSE(copy.contains(2));
+    EXPECT_TRUE(copy.contains(3));
+}
+
+TEST(hash_table_map_copy_assign, ChainedAssignment) {
+    ::containers::hash_table::Map<int, int> a;
+    a.insert(1, 10);
+
+    ::containers::hash_table::Map<int, int> b, c;
+    c = b = a;
+
+    EXPECT_EQ(b.size(), 1u);
+    EXPECT_EQ(c.size(), 1u);
+    EXPECT_TRUE(b.contains(1));
+    EXPECT_TRUE(c.contains(1));
+}
+
 TEST(hash_table_map, empty) {
 	::containers::hash_table::Map<int, int> hashTable;
 	bool empty = hashTable.empty();

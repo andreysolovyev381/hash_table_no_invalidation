@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <bit>
+#include <climits>
+
 #include <cstddef>
 #include <list>
 #include <variant>
@@ -62,6 +65,15 @@ namespace requirements {
 namespace containers {
 
 	namespace pmr {
+		    
+		static inline std::size_t constexpr BITS_PER_BYTE {static_cast<std::size_t>(CHAR_BIT)}; //8ull;
+
+    	static inline constexpr auto minimumBitCount (std::unsigned_integral auto value) {
+        	return ((sizeof(value) * BITS_PER_BYTE) - std::countl_zero(value));
+    	}
+	    static inline constexpr auto minimumPowerOfTwo (std::unsigned_integral auto value) {
+    	    return (1ull << minimum_bit_count(value - 1));
+    	}
 
 		template <std::size_t Alignment>
 		class AlignedMemoryResource : public std::pmr::memory_resource {
@@ -98,9 +110,9 @@ namespace containers {
 //		usage example
 //		std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
 
-//		pmr::AlignedMemoryResource<(sizeof(T) < 24 ? sizeof(T) : 24)> aligned_resource;
-//		aligned_resource(&pmr::resource);
-//		std::pmr::list<int> l(pmr::allocator_type{&aligned_resource});
+		// pmr::AlignedMemoryResource<(sizeof(T) < 24 ? sizeof(T) : 24)> aligned_resource;
+		// aligned_resource(&pmr::resource);
+		// std::pmr::list<int> l(pmr::allocator_type{&aligned_resource});
 
 
 	}//!namespace details::pmr
@@ -445,11 +457,69 @@ namespace containers {
 
 				virtual ~HashTable() = default;
 
-				HashTable(HashTable const&) = delete;
+				HashTable(HashTable const& other)
+				    : data(pmr::allocator_type{&pmr::resource})
+				    , access(data, other.access.capacity)
+				{
+					for (auto const& item : other.data){
+    					data.emplace_back(item);
+					}
+
+				    std::unordered_map<MappedType const*, CIter> iterMap;
+				    iterMap.reserve(other.access.sz);
+				
+				    auto newIt {data.cbegin()};
+				    for (auto oldIt = other.data.cbegin(); oldIt != other.data.cend(); ++oldIt, ++newIt)
+				        iterMap[std::addressof(*oldIt)] = newIt;
+				
+				    access.sz            = other.access.sz;
+				    access.deleted_count = other.access.deleted_count;
+				
+				    for (std::size_t i = 0; i < other.access.capacity; ++i) {
+				        auto const& elem {other.access.accessHelper[i]};
+				        if (elem.has_value()) {
+				            access.accessHelper[i].emplace(iterMap.at(std::addressof(*elem.value())));
+						}
+				        else if (elem.is_deleted()) {
+				            access.accessHelper[i].reset();
+						}
+				    }
+				}
+
+				HashTable& operator=(HashTable const& other) {
+				    if (this == &other) return *this;
+				
+				    data.clear();
+					for (auto const& item : other.data) {
+						data.emplace_back(item);
+					}
+				
+				    access.accessHelper.assign(other.access.capacity, {});
+				    access.capacity      = other.access.capacity;
+				    access.sz            = other.access.sz;
+				    access.deleted_count = other.access.deleted_count;
+				
+				    std::unordered_map<MappedType const*, CIter> iterMap;
+				    iterMap.reserve(other.access.sz);
+				
+				    auto newIt {data.cbegin()};
+				    for (auto oldIt = other.data.cbegin(); oldIt != other.data.cend(); ++oldIt, ++newIt)
+				        iterMap[std::addressof(*oldIt)] = newIt;
+				
+				    for (std::size_t i = 0; i < other.access.capacity; ++i) {
+				        auto const& elem {other.access.accessHelper[i]};
+				        if (elem.has_value()) {
+				            access.accessHelper[i].emplace(iterMap.at(std::addressof(*elem.value())));
+						}
+				        else if (elem.is_deleted()) {
+				            access.accessHelper[i].reset();
+						}
+				    }
+				
+				    return *this;
+				}
 
 				HashTable(HashTable &&) = default;
-
-				HashTable& operator=(HashTable const&) = delete;
 
 				HashTable& operator=(HashTable &&) = default;
 
