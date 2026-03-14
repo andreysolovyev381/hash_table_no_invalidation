@@ -241,7 +241,7 @@ namespace containers {
 				};
 
 				struct Access final {
-					using AccessHelper = typename std::vector<Element<CIter>>;
+					using AccessHelper = typename std::vector<Element<Iter>>;
 					using AccessIter = typename AccessHelper::iterator;
 					using AccessCIter = typename AccessHelper::const_iterator;
 
@@ -309,18 +309,23 @@ namespace containers {
 						return accessHelper.cend();
 					}
 
-					CIter find(KeyType const &key) {
+					Iter find(KeyType const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					std::pair<CIter, bool> insert(MappedType mappedValue){
+					CIter find(KeyType const &key) const {
+						AccessCIter elemIter {getElemIter(key)};
+						return contains(elemIter) ? elemIter->value() : data.end();
+					}
 
-						auto emplaceable = [this](AccessCIter iter) -> bool {
+					std::pair<Iter, bool> insert(MappedType mappedValue){
+
+						auto emplaceable = [this](AccessIter iter) -> bool {
 							return iter != accessHelper.end() && iter->is_free();
 						};
 
-						auto place_to_data = [this](MappedType mappedValue) -> CIter {
+						auto place_to_data = [this](MappedType mappedValue) -> Iter {
 							data.emplace_back(std::move(mappedValue));
 							++sz;
 							return std::prev(data.end());
@@ -469,12 +474,14 @@ namespace containers {
     					data.emplace_back(item);
 					}
 
-				    std::unordered_map<MappedType const*, CIter> iterMap;
+				    std::unordered_map<MappedType const*, Iter> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
-				    auto newIt {data.cbegin()};
-				    for (auto oldIt = other.data.cbegin(); oldIt != other.data.cend(); ++oldIt, ++newIt)
+					auto oldIt {other.data.cbegin()};
+				    auto newIt {data.begin()};
+				    for (; oldIt != other.data.cend(); ++oldIt, ++newIt) {
 				        iterMap[std::addressof(*oldIt)] = newIt;
+					}
 				
 				    access.sz            = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
@@ -491,9 +498,11 @@ namespace containers {
 				}
 
 				HashTable& operator=(HashTable const& other) {
-				    if (this == &other) return *this;
-				
-				    data.clear();
+				    if (this == &other) {
+						return *this;
+					}
+
+					data.clear();
 					for (auto const& item : other.data) {
 						data.emplace_back(item);
 					}
@@ -503,12 +512,14 @@ namespace containers {
 				    access.sz            = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				
-				    std::unordered_map<MappedType const*, CIter> iterMap;
+				    std::unordered_map<MappedType const*, Iter> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
-				    auto newIt {data.cbegin()};
-				    for (auto oldIt = other.data.cbegin(); oldIt != other.data.cend(); ++oldIt, ++newIt)
+					auto oldIt {other.data.cbegin()};
+				    auto newIt {data.begin()};
+				    for (; oldIt != other.data.cend(); ++oldIt, ++newIt) {
 				        iterMap[std::addressof(*oldIt)] = newIt;
+					}
 				
 				    for (std::size_t i = 0; i < other.access.capacity; ++i) {
 				        auto const& elem {other.access.accessHelper[i]};
@@ -519,8 +530,8 @@ namespace containers {
 				            access.accessHelper[i].reset();
 						}
 				    }
-				
-				    return *this;
+
+					return *this;
 				}
 
 				HashTable(HashTable &&) = default;
@@ -533,7 +544,11 @@ namespace containers {
 					return access.insert(MappedType(std::forward<Args>(args)...));
 				}
 
-				CIter find(KeyType const& key) { return access.find(key); }
+				Iter find(KeyType const& key) 
+				requires requirements::IsMapConcept<MappedType>
+				{ return access.find(key); }
+
+				CIter find(KeyType const& key) const { return access.find(key); }
 
 				void erase(KeyType const &key) { access.erase(key); }
 
