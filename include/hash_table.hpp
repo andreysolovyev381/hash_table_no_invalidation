@@ -205,6 +205,7 @@ namespace containers {
 			public:
 				using Iter = typename decltype(getIterType())::type;
 				using CIter = typename Data::const_iterator;
+				using RIter = typename Data::reverse_iterator;
 				using CRIter = typename Data::const_reverse_iterator;
 
 				using iterator = typename decltype(getIterType())::type;
@@ -568,6 +569,10 @@ namespace containers {
 
 				bool empty() const{ return access.sz == 0u; }
 
+				Iter begin() requires requirements::IsMapConcept<MappedType> { return data.begin(); }
+
+				Iter end() requires requirements::IsMapConcept<MappedType> { return data.end(); }
+
 				CIter begin() const { return data.cbegin(); }
 
 				CIter end() const { return data.cend(); }
@@ -575,6 +580,10 @@ namespace containers {
 				CIter cbegin() const { return data.cbegin(); }
 
 				CIter cend() const { return data.cend(); }
+
+				RIter rbegin() requires requirements::IsMapConcept<MappedType> { return data.rbegin(); }
+
+				RIter rend() requires requirements::IsMapConcept<MappedType> { return data.rend(); }
 
 				CRIter rbegin() const { return data.crbegin(); }
 
