@@ -596,6 +596,11 @@ namespace containers {
 		::requirements::hash::IsHash<T, Hasher, std::size_t> &&
 		::requirements::cmp::IsComparator<T, Equal>
 		struct Set final : public details::HashTable<T, Hasher, Equal> {
+			using key_type = T;
+			using value_type = T;
+			using hasher = Hasher;
+			using key_equal = Equal;
+
 			using details::HashTable<T, Hasher, Equal>::HashTable;
 		};
 
@@ -604,6 +609,12 @@ namespace containers {
 		::requirements::hash::IsHash<Key, Hasher, std::size_t> &&
 		::requirements::cmp::IsComparator<Key, Equal>
 		struct Map final : public details::HashTable<std::pair<Key const, Value>, Hasher, Equal> {
+			using key_type = Key;
+			using mapped_type = Value;
+			using value_type = std::pair<Key const, Value>;
+			using hasher = Hasher;
+			using key_equal = Equal;
+
 			using details::HashTable<std::pair<Key const, Value>, Hasher, Equal>::HashTable;
 
 			Value& operator[](Key const& key)
