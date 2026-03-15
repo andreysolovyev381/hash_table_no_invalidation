@@ -535,10 +535,29 @@ namespace containers {
 					return *this;
 				}
 
-				HashTable(HashTable &&) = default;
+				HashTable(HashTable&& other) noexcept
+				    : data(pmr::allocator_type{&pmr::resource})
+				    , access(data, other.access.capacity)
+				{
+				    data = std::move(other.data);
+				    access.accessHelper = std::move(other.access.accessHelper);
+				    access.sz = other.access.sz;
+				    access.deleted_count = other.access.deleted_count;
+				}
 
-				HashTable& operator=(HashTable &&) = default;
-
+				HashTable& operator=(HashTable&& other) noexcept 
+				{
+				    if (this == &other) {
+				        return *this;
+				    }
+				    data = std::move(other.data);
+				    access.accessHelper = std::move(other.access.accessHelper);
+				    access.capacity = other.access.capacity;
+				    access.sz = other.access.sz;
+				    access.deleted_count = other.access.deleted_count;
+				    return *this;
+				}
+				
 				template<typename... Args>
 				requires std::constructible_from<MappedType, Args...>
 				std::pair<Iter, bool> insert(Args&&... args) {
