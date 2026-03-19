@@ -229,13 +229,15 @@ namespace containers {
 
 			public:
 				using key_type = KeyType;
-			protected:				
+			protected:
 				using mapped_type = MappedType;
 			public:
 				using value_type = T;
 				using hasher = Hasher;
 				using key_equal = KeyEqual;
+			protected:
 				using allocator_type = pmr::allocator_type<T>;
+			public:
 				using iterator = typename decltype(getIterType())::type;
 				using const_iterator = typename Data::const_iterator;
 				using reverse_iterator = typename Data::reverse_iterator;
@@ -739,7 +741,10 @@ namespace containers {
 			using value_type = typename base_type::value_type;
 			using hasher = typename base_type::hasher;
 			using key_equal = typename base_type::key_equal;
+#if 0
+//todo requires some exercises with ctor
 			using allocator_type = typename base_type::allocator_type;
+#endif			
 			using iterator = typename base_type::iterator;
 			using const_iterator = typename base_type::const_iterator;
 			using reverse_iterator = typename base_type::reverse_iterator;
@@ -762,7 +767,10 @@ namespace containers {
 			using value_type = typename base_type::value_type;
 			using hasher = typename base_type::hasher;
 			using key_equal = typename base_type::key_equal;
+#if 0
+//todo requires some exercises with ctor
 			using allocator_type = typename base_type::allocator_type;
+#endif			
 			using iterator = typename base_type::iterator;
 			using const_iterator = typename base_type::const_iterator;
 			using reverse_iterator = typename base_type::reverse_iterator;
