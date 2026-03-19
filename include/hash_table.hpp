@@ -743,6 +743,9 @@ namespace containers {
 			using key_equal = typename base_type::key_equal;
 #if 0
 //todo requires some exercises with ctor
+//however:
+// That's the root cause of your build failure: Map's internal std::pmr::list sees that the mapped type (Set) advertises allocator_type, assumes it's allocator-aware, and tries to call Set(Set&&, alloc const&) — which you never wrote and shouldn't need to write.
+//Set, Map (HashTable) — remove public allocator_type. They're containers that manage their own memory_resource* internally. They're never meant to be constructed by someone else passing an allocator in. Exposing the typedef just tricks the PMR machinery into calling constructors that don't exist and shouldn't exist.
 			using allocator_type = typename base_type::allocator_type;
 #endif			
 			using iterator = typename base_type::iterator;
