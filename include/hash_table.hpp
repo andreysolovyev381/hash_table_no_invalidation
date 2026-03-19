@@ -310,7 +310,7 @@ namespace containers {
 					    std::size_t h {hasher(key) & mask};
 					    std::size_t const step {h | 1};
 					
-					    auto check = [&](std::size_t idx) __attribute__((always_inline)) -> bool {
+					    auto check = [this, &key](std::size_t idx) __attribute__((always_inline)) -> bool {
 					        return accessHelper[idx].is_free() ||
 					               (accessHelper[idx].has_value() && equal(keyExtractor(*(accessHelper[idx].value())), key));
 					    };
@@ -331,7 +331,7 @@ namespace containers {
 					    std::size_t h {hasher(key) & mask};
 					    std::size_t const step {h | 1};
 					
-					    auto check = [&](std::size_t idx) __attribute__((always_inline)) -> bool {
+					    auto check = [this, &key](std::size_t idx) __attribute__((always_inline)) -> bool {
 					        return accessHelper[idx].is_free() ||
 					               (accessHelper[idx].has_value() && equal(keyExtractor(*(accessHelper[idx].value())), key));
 					    };
