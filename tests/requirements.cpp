@@ -42,14 +42,3 @@ TEST (type_requirements, Hash) {
 	ASSERT_TRUE(result);
 }
 
-
-TEST (type_requirements, Comparator) {
-	bool result = cmp::is_comparator_v<S1, SComparator>;
-	ASSERT_TRUE(result);
-	result = cmp::is_comparator_v<S1, SHasher>;
-	ASSERT_FALSE(result);
-	result = cmp::is_comparator_v<S1, double>;
-	ASSERT_FALSE(result);
-	result = cmp::is_comparator_v<S1, std::less<S1>>;
-	ASSERT_TRUE(result);
-}

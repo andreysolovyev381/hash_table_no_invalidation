@@ -1,0 +1,60 @@
+***WARNING*** Failed to set thread affinity. Estimated CPU frequency may be incorrect.
+2026-03-19T00:07:15+01:00
+Running ./hash_table_benchmark
+Run on (8 X 23.9996 MHz CPU s)
+CPU Caches:
+  L1 Data 64 KiB
+  L1 Instruction 128 KiB
+  L2 Unified 4096 KiB (x8)
+Load Average: 2.96, 3.03, 3.12
+---------------------------------------------------------------------------------------------------------------------------------
+Benchmark                                                                       Time             CPU   Iterations UserCounters...
+---------------------------------------------------------------------------------------------------------------------------------
+Insertion std::unordered_set          /min_time:5.000/repeats:5_mean        0.029 us        0.028 us            5 items_per_second=35.1964M/s ns/op=28.414ns
+Insertion std::unordered_set          /min_time:5.000/repeats:5_median      0.029 us        0.029 us            5 items_per_second=35.0373M/s ns/op=28.541ns
+Insertion std::unordered_set          /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=331.093k/s ns/op=264.078ps
+Insertion std::unordered_set          /min_time:5.000/repeats:5_cv           1.46 %          0.93 %             5 items_per_second=0.94% ns/op=0.93%
+Insertion containers::hash_table::Set /min_time:5.000/repeats:5_mean        0.035 us        0.035 us            5 items_per_second=28.8055M/s ns/op=34.7581ns
+Insertion containers::hash_table::Set /min_time:5.000/repeats:5_median      0.036 us        0.035 us            5 items_per_second=28.4895M/s ns/op=35.1007ns
+Insertion containers::hash_table::Set /min_time:5.000/repeats:5_stddev      0.002 us        0.001 us            5 items_per_second=1.12529M/s ns/op=1.36198ns
+Insertion containers::hash_table::Set /min_time:5.000/repeats:5_cv           5.39 %          3.92 %             5 items_per_second=3.91% ns/op=3.92%
+Insertion std::unordered_map          /min_time:5.000/repeats:5_mean        0.052 us        0.050 us            5 items_per_second=19.9255M/s ns/op=50.3742ns
+Insertion std::unordered_map          /min_time:5.000/repeats:5_median      0.049 us        0.048 us            5 items_per_second=20.6836M/s ns/op=48.3476ns
+Insertion std::unordered_map          /min_time:5.000/repeats:5_stddev      0.004 us        0.004 us            5 items_per_second=1.32103M/s ns/op=3.53323ns
+Insertion std::unordered_map          /min_time:5.000/repeats:5_cv           8.52 %          7.01 %             5 items_per_second=6.63% ns/op=7.01%
+Insertion containers::hash_table::Map /min_time:5.000/repeats:5_mean        0.050 us        0.049 us            5 items_per_second=20.3357M/s ns/op=49.1944ns
+Insertion containers::hash_table::Map /min_time:5.000/repeats:5_median      0.051 us        0.050 us            5 items_per_second=20.0737M/s ns/op=49.8165ns
+Insertion containers::hash_table::Map /min_time:5.000/repeats:5_stddev      0.002 us        0.001 us            5 items_per_second=458.592k/s ns/op=1.10045ns
+Insertion containers::hash_table::Map /min_time:5.000/repeats:5_cv           3.05 %          2.24 %             5 items_per_second=2.26% ns/op=2.24%
+Access std::unordered_set             /min_time:5.000/repeats:5_mean        0.028 us        0.028 us            5 items_per_second=36.2709M/s ns/op=27.5924ns
+Access std::unordered_set             /min_time:5.000/repeats:5_median      0.028 us        0.027 us            5 items_per_second=36.5885M/s ns/op=27.331ns
+Access std::unordered_set             /min_time:5.000/repeats:5_stddev      0.001 us        0.001 us            5 items_per_second=1.13216M/s ns/op=885.246ps
+Access std::unordered_set             /min_time:5.000/repeats:5_cv           3.82 %          3.21 %             5 items_per_second=3.12% ns/op=3.21%
+Access containers::hash_table::Set    /min_time:5.000/repeats:5_mean        0.030 us        0.029 us            5 items_per_second=34.2467M/s ns/op=29.2174ns
+Access containers::hash_table::Set    /min_time:5.000/repeats:5_median      0.029 us        0.029 us            5 items_per_second=34.6016M/s ns/op=28.9004ns
+Access containers::hash_table::Set    /min_time:5.000/repeats:5_stddev      0.001 us        0.001 us            5 items_per_second=933.555k/s ns/op=802.787ps
+Access containers::hash_table::Set    /min_time:5.000/repeats:5_cv           3.89 %          2.75 %             5 items_per_second=2.73% ns/op=2.75%
+Access std::unordered_map             /min_time:5.000/repeats:5_mean        0.025 us        0.025 us            5 items_per_second=40.3595M/s ns/op=24.7796ns
+Access std::unordered_map             /min_time:5.000/repeats:5_median      0.025 us        0.025 us            5 items_per_second=40.1779M/s ns/op=24.8893ns
+Access std::unordered_map             /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=436.779k/s ns/op=267.513ps
+Access std::unordered_map             /min_time:5.000/repeats:5_cv           1.11 %          1.08 %             5 items_per_second=1.08% ns/op=1.08%
+Access containers::hash_table::Map    /min_time:5.000/repeats:5_mean        0.028 us        0.028 us            5 items_per_second=35.934M/s ns/op=27.8298ns
+Access containers::hash_table::Map    /min_time:5.000/repeats:5_median      0.028 us        0.028 us            5 items_per_second=36.0891M/s ns/op=27.7092ns
+Access containers::hash_table::Map    /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=243.866k/s ns/op=189.801ps
+Access containers::hash_table::Map    /min_time:5.000/repeats:5_cv           0.82 %          0.68 %             5 items_per_second=0.68% ns/op=0.68%
+Erase std::unordered_set              /min_time:5.000/repeats:5_mean        0.003 us        0.003 us            5 items_per_second=337.48M/s ns/op=2.96318ns
+Erase std::unordered_set              /min_time:5.000/repeats:5_median      0.003 us        0.003 us            5 items_per_second=337.273M/s ns/op=2.96496ns
+Erase std::unordered_set              /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=1.31257M/s ns/op=11.5127ps
+Erase std::unordered_set              /min_time:5.000/repeats:5_cv           0.89 %          0.39 %             5 items_per_second=0.39% ns/op=0.39%
+Erase containers::hash_table::Set     /min_time:5.000/repeats:5_mean        0.042 us        0.042 us            5 items_per_second=24.0959M/s ns/op=41.5162ns
+Erase containers::hash_table::Set     /min_time:5.000/repeats:5_median      0.042 us        0.042 us            5 items_per_second=23.8418M/s ns/op=41.9432ns
+Erase containers::hash_table::Set     /min_time:5.000/repeats:5_stddev      0.001 us        0.001 us            5 items_per_second=518.602k/s ns/op=889.775ps
+Erase containers::hash_table::Set     /min_time:5.000/repeats:5_cv           2.79 %          2.14 %             5 items_per_second=2.15% ns/op=2.14%
+Erase std::unordered_map              /min_time:5.000/repeats:5_mean        0.003 us        0.003 us            5 items_per_second=338.669M/s ns/op=2.95282ns
+Erase std::unordered_map              /min_time:5.000/repeats:5_median      0.003 us        0.003 us            5 items_per_second=339.466M/s ns/op=2.94581ns
+Erase std::unordered_map              /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=1.9473M/s ns/op=17.0961ps
+Erase std::unordered_map              /min_time:5.000/repeats:5_cv           1.14 %          0.58 %             5 items_per_second=0.57% ns/op=0.58%
+Erase containers::hash_table::Map     /min_time:5.000/repeats:5_mean        0.040 us        0.040 us            5 items_per_second=24.7693M/s ns/op=40.3759ns
+Erase containers::hash_table::Map     /min_time:5.000/repeats:5_median      0.041 us        0.040 us            5 items_per_second=24.7116M/s ns/op=40.4668ns
+Erase containers::hash_table::Map     /min_time:5.000/repeats:5_stddev      0.000 us        0.000 us            5 items_per_second=250.767k/s ns/op=408.2ps
+Erase containers::hash_table::Map     /min_time:5.000/repeats:5_cv           1.10 %          1.01 %             5 items_per_second=1.01% ns/op=1.01%

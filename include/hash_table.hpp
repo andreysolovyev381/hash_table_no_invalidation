@@ -41,50 +41,32 @@ namespace requirements {
 
 	}//!namespace hash
 
-	namespace cmp {
-
-		template <typename Type, typename MaybeComparator>
-		concept IsComparator = requires() {
-			requires std::is_same_v <
-					std::invoke_result_t<MaybeComparator, std::add_const_t<std::decay_t<Type>>, std::add_const_t<std::decay_t<Type>>>,
-					bool > ;
-		};
-
-		template <typename Type, typename MaybeComparator>
-		concept NotComparator = requires() {
-			requires !IsComparator<Type, MaybeComparator>;
-		};
-
-		template <typename Type, typename MaybeComparator>
-		static inline constexpr bool is_comparator_v { IsComparator<Type, MaybeComparator> ? true : false };
-
-	}//!namespace comparator
-
 }//!namespace requirements
 
 namespace containers {
 
 	namespace pmr {
 		    
-		static inline std::size_t constexpr BITS_PER_BYTE {static_cast<std::size_t>(CHAR_BIT)}; //8ull;
+		static inline constexpr std::size_t BITS_PER_BYTE {static_cast<std::size_t>(CHAR_BIT)}; //8ull;
 
     	static inline constexpr auto minimumBitCount (std::unsigned_integral auto value) {
         	return ((sizeof(value) * BITS_PER_BYTE) - std::countl_zero(value));
     	}
 	    static inline constexpr auto minimumPowerOfTwo (std::unsigned_integral auto value) {
-    	    return (1ull << minimum_bit_count(value - 1));
+    	    return (1ull << minimumBitCount(value - 1));
     	}
 
 		template <std::size_t Alignment>
-		class AlignedMemoryResource : public std::pmr::memory_resource {
+		class AlignedMemoryResource final : public std::pmr::memory_resource {
 		public:
 			explicit AlignedMemoryResource(std::pmr::memory_resource* upstream)
-					: upstream_resource(upstream) {}
+				: upstream_resource(upstream) 
+			{}
 
 		protected:
 			void* do_allocate(std::size_t bytes, std::size_t alignment) override {
 				alignment = std::max(alignment, Alignment);
-				void* p = upstream_resource->allocate(bytes, alignment);
+				void* p {upstream_resource->allocate(bytes, alignment)};
 				if (!p) {
 					throw std::bad_alloc();
 				}
@@ -96,7 +78,7 @@ namespace containers {
 			}
 
 			bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
-				const auto* other_ptr = dynamic_cast<const AlignedMemoryResource*>(&other);
+				auto const* other_ptr {dynamic_cast<const AlignedMemoryResource*>(&other)};
 				return other_ptr && upstream_resource->is_equal(*other_ptr->upstream_resource);
 			}
 		private:
@@ -104,15 +86,15 @@ namespace containers {
 		};
 
 		static inline std::pmr::synchronized_pool_resource resource(std::pmr::get_default_resource());
+		// using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
+		// usage example
+		// std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
 
-		using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-
-//		usage example
-//		std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
-
-		// pmr::AlignedMemoryResource<(sizeof(T) < 24 ? sizeof(T) : 24)> aligned_resource;
-		// aligned_resource(&pmr::resource);
-		// std::pmr::list<int> l(pmr::allocator_type{&aligned_resource});
+		template<typename T = std::byte>
+		using allocator_type = std::pmr::polymorphic_allocator<T>;
+		template<typename T>
+		inline AlignedMemoryResource<minimumPowerOfTwo(sizeof(T))> aligned_resource{&resource};
+		// std::pmr::list<int> l(pmr::allocator_type<T>{&pmr::aligned_resource<T>});
 
 
 	}//!namespace details::pmr
@@ -123,93 +105,103 @@ namespace containers {
 
 			namespace const_values {
 
-				static constexpr std::size_t initial_capacity {1<<5};
-				static constexpr std::size_t max_type_sizeof {1<<10};
-				static constexpr double maxLoadFactor {0.5};
-				static constexpr int maxEmplaceAttempts {5};
+				constexpr inline std::size_t initial_capacity {1<<5};
+				constexpr inline std::size_t max_type_sizeof {1<<10};
+				constexpr inline double maxLoadFactor {0.5};
+				constexpr inline int maxEmplaceAttempts {5};
 
 			}//!namespace details::const_values
 
 			namespace requirements {
 
-				template<typename MappedType>
-				concept IsMapConcept = std::same_as<MappedType,
-						std::pair<typename MappedType::first_type, typename MappedType::second_type>>;
+				enum class Type : std::uint8_t {
+					Set = 0,
+					Map = 1,
+				};
 
-				template<typename MappedType>
-				concept IsSetConcept = !IsMapConcept<MappedType>;
+				template<Type t>
+				concept IsMapConcept = requires { requires t == Type::Map; };				
+				template<Type t>
+				static constexpr inline bool is_map_v {t == Type::Map};
+
+				template<Type t>
+				concept IsSetConcept = requires { requires t == Type::Set; };
+				template<Type t>
+				static constexpr inline bool is_set_v {t == Type::Set};
 
 			}//!namespace details::requirements
 
-			template<typename T, typename Hasher, typename Equal>
+			template<typename T, typename Hasher, typename KeyEqual, requirements::Type t>
 			class HashTable {
 			private:
-				using MappedType = T;
+				static constexpr requirements::Type type {t};
 
 				static constexpr auto getKeyType(){
-					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
-						return std::type_identity<typename MappedType::first_type>{};
+					if constexpr (requirements::is_map_v<type>) {
+						return std::type_identity<typename T::first_type>{};
 					}
-					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
-						return std::type_identity<MappedType>{};
+					else if constexpr (requirements::is_set_v<type>) {
+						return std::type_identity<T>{};
 					}
 					else {
 						throw std::invalid_argument("can't recognized mapped type extracting Key Type");
 					}
 				}
-
 				using KeyType = typename decltype(getKeyType())::type;
 
-				static constexpr auto getValueType(){
-					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
-						return std::type_identity<typename MappedType::second_type>{};
+				static constexpr auto getMappedType(){
+					if constexpr (requirements::is_map_v<type>) {
+						return std::type_identity<typename T::second_type>{};
 					}
-					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
-						return std::type_identity<MappedType>{};
+					else if constexpr (requirements::is_set_v<type>) {
+						return std::type_identity<T>{};
 					}
 					else {
 						throw std::invalid_argument("can't recognized mapped type extracting Value Type");
 					}
 				}
-
-				using ValueType = typename decltype(getValueType())::type;
+				using MappedType = typename decltype(getMappedType())::type;
 
 				struct KeyExtractor {
-					KeyType const& operator()(std::pair<KeyType const, ValueType> const& value) const
-					requires requirements::IsMapConcept<MappedType>
+					KeyType const& operator()(std::pair<KeyType const, MappedType> const& value) const
+					requires requirements::IsMapConcept<type>
 					{
 						return value.first;
 					}
 
-					ValueType const& operator()(ValueType const& value) const
-					requires requirements::IsSetConcept<MappedType>
+					MappedType const& operator()(MappedType const& value) const
+					requires requirements::IsSetConcept<type>
 					{
 						return value;
 					}
 				};
 
-				using Data = typename std::pmr::list<MappedType>;
+				using Data = typename std::pmr::list<T>;
 
 				static constexpr auto getIterType(){
-					if constexpr (requires {requires requirements::IsMapConcept<MappedType>;}) {
+					if constexpr (requirements::is_map_v<type>) {
 						return std::type_identity<typename Data::iterator>{};
 					}
-					else if constexpr (requires {requires requirements::IsSetConcept<MappedType>;}) {
+					else if constexpr (requirements::is_set_v<type>) {
 						return std::type_identity<typename Data::const_iterator>{};
 					}
 					else {
-						throw std::invalid_argument("can't recognized mapped type extracting Iter Type");
+						throw std::invalid_argument("can't recognized mapped type extracting Iterator Type");
 					}
 				}
 
 			public:
-				using Iter = typename decltype(getIterType())::type;
-				using CIter = typename Data::const_iterator;
-				using RIter = typename Data::reverse_iterator;
-				using CRIter = typename Data::const_reverse_iterator;
-
+				using key_type = KeyType;
+			protected:				
+				using mapped_type = MappedType;
+			public:
+				using value_type = T;
+				using hasher = Hasher;
+				using key_equal = KeyEqual;
+				using allocator_type = pmr::allocator_type<T>;
 				using iterator = typename decltype(getIterType())::type;
 				using const_iterator = typename Data::const_iterator;
+				using reverse_iterator = typename Data::reverse_iterator;
 				using const_reverse_iterator = typename Data::const_reverse_iterator;
 
 			private:
@@ -242,10 +234,11 @@ namespace containers {
 				};
 
 				struct Access final {
-					using AccessHelper = typename std::vector<Element<Iter>>;
+					using AccessHelper = typename std::vector<Element<iterator>>;
 					using AccessIter = typename AccessHelper::iterator;
 					using AccessCIter = typename AccessHelper::const_iterator;
 
+					std::pmr::memory_resource* memResourcePtr;
 					Data &data;
 					AccessHelper accessHelper;
 					std::size_t capacity;
@@ -253,26 +246,28 @@ namespace containers {
 					std::size_t deleted_count;
 
 					Hasher hasher;
-					Equal equal;
+					KeyEqual equal;
 					KeyExtractor keyExtractor;
 
-					explicit Access(Data &data)
-						: data(data)
-						, capacity {sizeof(MappedType) > const_values::max_type_sizeof ? 1 : const_values::initial_capacity}
+					explicit Access(Data &data, std::pmr::memory_resource* res)
+						: memResourcePtr(res)
+						, data(data)
+						, capacity {sizeof(T) > const_values::max_type_sizeof ? 1 : const_values::initial_capacity}
 						, sz {0}
 						, deleted_count{0}
 					{
 						accessHelper.resize(capacity);
 					}
 
-					explicit Access(Data &data, std::size_t capacity)
-						: data(data)
+					explicit Access(Data &data, std::size_t initialCapacity, std::pmr::memory_resource* res)
+						: memResourcePtr(res)
+						, data(data)
 						, capacity 
-							{capacity == 0 ? 
-								sizeof(MappedType) > const_values::max_type_sizeof ? 
+							{initialCapacity == 0 ? 
+								sizeof(T) > const_values::max_type_sizeof ? 
 									1 : 
 									const_values::initial_capacity : 
-								capacity
+								initialCapacity
 							}
 						, sz {0}
 						, deleted_count{0}
@@ -280,7 +275,7 @@ namespace containers {
 						accessHelper.resize(capacity);
 					}
 
-					AccessIter getElemIter(KeyType const &key) {
+					AccessIter getElemIter(key_type const &key) {
 						std::size_t h {hasher(key) % capacity};
 						std::size_t const step {h | 1};
 
@@ -295,7 +290,7 @@ namespace containers {
 						return accessHelper.end();
 					}
 
-					AccessCIter getElemIter(KeyType const &key) const {
+					AccessCIter getElemIter(key_type const &key) const {
 						std::size_t h {hasher(key) % capacity};
 						std::size_t const step {h | 1};
 
@@ -310,33 +305,38 @@ namespace containers {
 						return accessHelper.cend();
 					}
 
-					Iter find(KeyType const &key) {
+					iterator find(key_type const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					CIter find(KeyType const &key) const {
+					const_iterator find(key_type const &key) const {
 						AccessCIter elemIter {getElemIter(key)};
 						return contains(elemIter) ? elemIter->value() : data.end();
 					}
 
-					std::pair<Iter, bool> insert(MappedType mappedValue){
+					std::pair<iterator, bool> insert(T mappedValue){
 
 						auto emplaceable = [this](AccessIter iter) -> bool {
 							return iter != accessHelper.end() && iter->is_free();
 						};
 
-						auto place_to_data = [this](MappedType mappedValue) -> Iter {
-							data.emplace_back(std::move(mappedValue));
-							++sz;
-							return std::prev(data.end());
+						auto place_to_data = [this](T mappedValue) -> iterator {
+						    data.emplace_back(
+						        std::make_obj_using_allocator<T>(
+						            pmr::allocator_type<T>{memResourcePtr},
+						            std::move(mappedValue)
+						        )
+						    );
+						    ++sz;
+						    return std::prev(data.end());
 						};
 
 						double const currLoadFactor {1.0 * (sz + deleted_count) / capacity};
 						if (currLoadFactor > const_values::maxLoadFactor) {
 							rehash();
 						}
-						KeyType const& key {keyExtractor(mappedValue)};
+						key_type const& key {keyExtractor(mappedValue)};
 						AccessIter elemIter {getElemIter(key)};
 						if (contains(elemIter)) {
 							return {elemIter->value(), false};
@@ -359,7 +359,7 @@ namespace containers {
 						}
 					}
 
-					void erase(KeyType const &key) {
+					void erase(key_type const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						if (!contains(elemIter)) {
 							return;
@@ -382,7 +382,7 @@ namespace containers {
 								continue;
 							}
 							//at this point we know that both values are presented
-							KeyType const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
+							key_type const& key_next {keyExtractor(*(accessHelper[idx_next].value()))};
 							std::size_t hash_next   {hasher(key_next)};
 
 							//should skip as it is collision of placement, hashes are different (ie 18 and 9)
@@ -409,7 +409,7 @@ namespace containers {
 						++deleted_count;
 					}
 
-					void erase(CIter cIter){
+					void erase(const_iterator cIter){
 						auto const& key {keyExtractor(*cIter)};
 						erase(key);
 					}
@@ -446,36 +446,47 @@ namespace containers {
 						return iter != accessHelper.end() && iter->has_value();
 					}
 
-					bool contains(KeyType const& key) const {
+					bool contains(key_type const& key) const {
 						AccessCIter iter {getElemIter(key)};
 						return contains(iter);
 					}
-
 				};
 
 			public:
 
+				virtual ~HashTable() = default;
+
 				HashTable()
-						: data(pmr::allocator_type{&pmr::resource})
-						, access(data)
+					// : data(pmr::allocator_type{&pmr::resource})
+					: memResourcePtr (&pmr::aligned_resource<T>)
+					, data(pmr::allocator_type<T>{memResourcePtr})
+					, access(data, memResourcePtr)
 				{}
 
 				HashTable(std::size_t initialCapacity)
-						: data(pmr::allocator_type{&pmr::resource})
-						, access(data, initialCapacity)
+					// : data(pmr::allocator_type{&pmr::resource})
+					: memResourcePtr (&pmr::aligned_resource<T>)
+					, data(pmr::allocator_type<T>{memResourcePtr})
+					, access(data, initialCapacity, memResourcePtr)
 				{}
 
-				virtual ~HashTable() = default;
-
 				HashTable(HashTable const& other)
-				    : data(pmr::allocator_type{&pmr::resource})
-				    , access(data, other.access.capacity)
+				    // : data(pmr::allocator_type{&pmr::resource})
+					: memResourcePtr (other.memResourcePtr)
+					, data(pmr::allocator_type<T>{memResourcePtr})
+				    , access(data, other.access.capacity, memResourcePtr)
 				{
 					for (auto const& item : other.data){
-    					data.emplace_back(item);
+    					// data.emplace_back(item);
+					    data.emplace_back(
+					        std::make_obj_using_allocator<T>(
+					            pmr::allocator_type<T>{memResourcePtr},
+					            item
+					        )
+					    );
 					}
 
-				    std::unordered_map<MappedType const*, Iter> iterMap;
+				    std::unordered_map<T const*, iterator> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
 					auto oldIt {other.data.cbegin()};
@@ -505,7 +516,13 @@ namespace containers {
 
 					data.clear();
 					for (auto const& item : other.data) {
-						data.emplace_back(item);
+						// data.emplace_back(item);
+					    data.emplace_back(
+					        std::make_obj_using_allocator<T>(
+					            pmr::allocator_type<T>{memResourcePtr},
+					            item
+					        )
+					    );
 					}
 				
 				    access.accessHelper.assign(other.access.capacity, {});
@@ -513,7 +530,7 @@ namespace containers {
 				    access.sz            = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				
-				    std::unordered_map<MappedType const*, Iter> iterMap;
+				    std::unordered_map<T const*, iterator> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
 					auto oldIt {other.data.cbegin()};
@@ -536,11 +553,14 @@ namespace containers {
 				}
 
 				HashTable(HashTable&& other) noexcept
-				    : data(pmr::allocator_type{&pmr::resource})
-				    , access(data, other.access.capacity)
+				    // : data(pmr::allocator_type{&pmr::resource})
+					: memResourcePtr (other.memResourcePtr)
+					, data(pmr::allocator_type<T>{memResourcePtr})
+				    , access(data, 0, memResourcePtr)
 				{
 				    data.splice(data.end(), other.data);
 				    access.accessHelper = std::move(other.access.accessHelper);
+					access.capacity     = other.access.capacity;
 				    access.sz = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				}
@@ -560,24 +580,29 @@ namespace containers {
 				}
 
 				template<typename... Args>
-				requires std::constructible_from<MappedType, Args...>
-				std::pair<Iter, bool> insert(Args&&... args) {
-					return access.insert(MappedType(std::forward<Args>(args)...));
+				requires std::constructible_from<T, Args...> && 
+				(!std::same_as<T, std::remove_cvref_t<Args>> && ...)
+				std::pair<iterator, bool> insert(Args&&... args) {
+					return access.insert(T(std::forward<Args>(args)...));
 				}
 
-				Iter find(KeyType const& key) 
-				requires requirements::IsMapConcept<MappedType>
-				{ return access.find(key); }
+				std::pair<iterator, bool> insert(T value) {
+					return access.insert(std::move(value));
+				}
 
-				CIter find(KeyType const& key) const { return access.find(key); }
+				iterator find(key_type const& key) 
+				requires requirements::IsMapConcept<type>
+					{ return access.find(key); }
 
-				void erase(KeyType const &key) { access.erase(key); }
+				const_iterator find(key_type const& key) const { return access.find(key); }
 
-				void erase(CIter const cIter) { access.erase(cIter); }
+				void erase(key_type const &key) { access.erase(key); }
 
-				bool contains(KeyType const &key) const{ return access.contains(key); }
+				void erase(const_iterator const cIter) { access.erase(cIter); }
 
-				CIter at(KeyType const& key) const {
+				bool contains(key_type const &key) const{ return access.contains(key); }
+
+				const_iterator at(key_type const& key) const {
 					auto found = find(key);
 					if (found == this->cend()) {
 						throw std::out_of_range("Hash table, method at() gets non-existent key");
@@ -589,62 +614,82 @@ namespace containers {
 
 				bool empty() const{ return access.sz == 0u; }
 
-				Iter begin() requires requirements::IsMapConcept<MappedType> { return data.begin(); }
+				iterator begin() requires requirements::IsMapConcept<type> { return data.begin(); }
 
-				Iter end() requires requirements::IsMapConcept<MappedType> { return data.end(); }
+				iterator end() requires requirements::IsMapConcept<type> { return data.end(); }
 
-				CIter begin() const { return data.cbegin(); }
+				const_iterator begin() const { return data.cbegin(); }
 
-				CIter end() const { return data.cend(); }
+				const_iterator end() const { return data.cend(); }
 
-				CIter cbegin() const { return data.cbegin(); }
+				const_iterator cbegin() const { return data.cbegin(); }
 
-				CIter cend() const { return data.cend(); }
+				const_iterator cend() const { return data.cend(); }
 
-				RIter rbegin() requires requirements::IsMapConcept<MappedType> { return data.rbegin(); }
+				reverse_iterator rbegin() requires requirements::IsMapConcept<type> { return data.rbegin(); }
 
-				RIter rend() requires requirements::IsMapConcept<MappedType> { return data.rend(); }
+				reverse_iterator rend() requires requirements::IsMapConcept<type> { return data.rend(); }
 
-				CRIter rbegin() const { return data.crbegin(); }
+				const_reverse_iterator rbegin() const { return data.crbegin(); }
 
-				CRIter rend() const { return data.crend(); }
+				const_reverse_iterator rend() const { return data.crend(); }
 
-				CRIter crbegin() const { return data.crbegin(); }
+				const_reverse_iterator crbegin() const { return data.crbegin(); }
 
-				CRIter crend() const { return data.crend(); }
+				const_reverse_iterator crend() const { return data.crend(); }
 
 			private:
+				std::pmr::memory_resource* memResourcePtr;
 				Data data;
 				Access access;
 			};
 
 		}//!namespace details
 
-		template <typename T, typename Hasher = std::hash<T>, typename Equal = std::equal_to<T>>
+		template <typename T, typename Hasher = std::hash<T>, typename KeyEqual = std::equal_to<T>>
 		requires
 		::requirements::hash::IsHash<T, Hasher, std::size_t> &&
-		::requirements::cmp::IsComparator<T, Equal>
-		struct Set final : public details::HashTable<T, Hasher, Equal> {
-			using key_type = T;
-			using value_type = T;
-			using hasher = Hasher;
-			using key_equal = Equal;
+		std::predicate<KeyEqual, T, T>
+		struct Set final : public details::HashTable<T, Hasher, KeyEqual, details::requirements::Type::Set> 
+		{
+		private:
+			using base_type = details::HashTable<T, Hasher, KeyEqual, details::requirements::Type::Set>;
+		public:
+			using key_type = typename base_type::key_type;
+			//no mapped_type
+			using value_type = typename base_type::value_type;
+			using hasher = typename base_type::hasher;
+			using key_equal = typename base_type::key_equal;
+			using allocator_type = typename base_type::allocator_type;
+			using iterator = typename base_type::iterator;
+			using const_iterator = typename base_type::const_iterator;
+			using reverse_iterator = typename base_type::reverse_iterator;
+			using const_reverse_iterator = typename base_type::const_reverse_iterator;
 
-			using details::HashTable<T, Hasher, Equal>::HashTable;
+			using base_type::base_type;
 		};
 
-		template <typename Key, typename Value, typename Hasher = std::hash<Key>, typename Equal = std::equal_to<Key>>
+		template <typename Key, typename Value, typename Hasher = std::hash<Key>, typename KeyEqual = std::equal_to<Key>>
 		requires
 		::requirements::hash::IsHash<Key, Hasher, std::size_t> &&
-		::requirements::cmp::IsComparator<Key, Equal>
-		struct Map final : public details::HashTable<std::pair<Key const, Value>, Hasher, Equal> {
-			using key_type = Key;
-			using mapped_type = Value;
-			using value_type = std::pair<Key const, Value>;
-			using hasher = Hasher;
-			using key_equal = Equal;
+		std::predicate<KeyEqual, Key, Key>
+		struct Map final : public details::HashTable<std::pair<Key const, Value>, Hasher, KeyEqual, details::requirements::Type::Map> 
+		{
+		private:
+			using base_type = details::HashTable<std::pair<Key const, Value>, Hasher, KeyEqual, details::requirements::Type::Map>;
+		public:
+			using key_type = typename base_type::key_type;
+			using mapped_type = typename base_type::mapped_type;
+			using value_type = typename base_type::value_type;
+			using hasher = typename base_type::hasher;
+			using key_equal = typename base_type::key_equal;
+			using allocator_type = typename base_type::allocator_type;
+			using iterator = typename base_type::iterator;
+			using const_iterator = typename base_type::const_iterator;
+			using reverse_iterator = typename base_type::reverse_iterator;
+			using const_reverse_iterator = typename base_type::const_reverse_iterator;
 
-			using details::HashTable<std::pair<Key const, Value>, Hasher, Equal>::HashTable;
+			using base_type::base_type;
 
 			Value& operator[](Key const& key)
 			requires std::default_initializable<Value>
@@ -653,7 +698,8 @@ namespace containers {
 				if (found != this->end()) {
 					return const_cast<Value&>(found->second);
 				}
-				auto [inserted, ok] {this->insert(key, Value{})};
+
+				auto [inserted, ok] {this->insert(value_type{key, Value{}} )};
 				return const_cast<Value&>(inserted->second);
 			}
 		};
