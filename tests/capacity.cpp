@@ -63,12 +63,12 @@ TEST(capacity_policy, grow) {
 	::containers::hash_table::details::CapacityPolicy cp {0, sizeof(int)};
 	ASSERT_EQ(cp.capacity(), 32u);
 
-	cp.grow();
+	cp.setCapacity(cp.capacity() << 1);
 	ASSERT_EQ(cp.capacity(), 64u);
 	ASSERT_EQ(cp.mask(), 63u);
 	ASSERT_TRUE(::containers::hash_table::details::CapacityPolicy::isPowerOfTwo(cp.capacity()));
 
-	cp.grow();
+	cp.setCapacity(cp.capacity() << 1);
 	ASSERT_EQ(cp.capacity(), 128u);
 	ASSERT_EQ(cp.mask(), 127u);
 	ASSERT_TRUE(::containers::hash_table::details::CapacityPolicy::isPowerOfTwo(cp.capacity()));
@@ -78,7 +78,7 @@ TEST(capacity_policy, maskCorrectness) {
 	::containers::hash_table::details::CapacityPolicy cp {16, sizeof(int)};
 	ASSERT_EQ(cp.mask(), cp.capacity() - 1);
 
-	cp.grow();
+	cp.setCapacity(cp.capacity() << 1);
 	ASSERT_EQ(cp.mask(), cp.capacity() - 1);
 }
 

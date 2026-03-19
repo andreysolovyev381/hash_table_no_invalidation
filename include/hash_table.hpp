@@ -119,12 +119,10 @@ namespace containers {
 				std::size_t capacity() const { return capacity_; }
 				std::size_t mask() const { return mask_; }
 
-				void grow() noexcept {
-					capacity_ <<= 1;
-					mask_ = capacity_ - 1;
-				}
-				
 				void setCapacity(std::size_t newCapacity) noexcept {
+					if (not isPowerOfTwo(newCapacity)) {
+						newCapacity = std::bit_ceil(newCapacity);
+					}
 					capacity_ = newCapacity;
 					mask_ = capacity_ - 1;
 				}
@@ -657,8 +655,10 @@ namespace containers {
 				}
 
 				template<typename... Args>
-				requires std::constructible_from<T, Args...> && 
-				(!std::same_as<T, std::remove_cvref_t<Args>> && ...)
+				requires 
+					(sizeof...(Args) > 0) &&
+					std::constructible_from<T, Args...> && 
+					(!std::same_as<T, std::remove_cvref_t<Args>> && ...)
 				std::pair<iterator, bool> insert(Args&&... args) {
 					return access.insert(T(std::forward<Args>(args)...));
 				}
@@ -786,11 +786,11 @@ namespace containers {
 			{
 				iterator found {this->find(key)};
 				if (found != this->end()) {
-					return const_cast<Value&>(found->second);
+					return found->second;
 				}
 
 				auto [inserted, ok] {this->insert(value_type{key, Value{}} )};
-				return const_cast<Value&>(inserted->second);
+				return inserted->second;
 			}
 		};
 
