@@ -4,6 +4,25 @@
 
 #pragma once
 
+#if defined(__clang__) || defined(__GNUC__)
+/*
+locality:
+0 non-temporal — fetch once, evict immediately after use, bypasses cache hierarchy
+1 L3/low reuse
+2 L2/moderate reuse
+3 L1/high reuse — keep it hot
+*/
+    #define PREFETCH(addr, rw, locality) __builtin_prefetch((addr), (rw), (locality))
+#elif defined(_MSC_VER)
+    #include <xmmintrin.h>
+    #define PREFETCH(addr, rw, locality) \
+        _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
+
+#else
+    #define PREFETCH(addr, rw, locality)
+#endif
+
+
 #include <bit>
 #include <climits>
 
@@ -18,17 +37,20 @@
 #include <stdexcept>
 #include <utility>
 
+
 namespace requirements {
 
 	namespace hash {
 
 		template<typename Type, typename MaybeHash, typename HashResult = std::size_t>
-		concept IsHash = (
-				                 std::negation_v<std::is_same<HashResult, bool>> &&
-				                 std::is_invocable_r_v<std::size_t, MaybeHash, std::add_const_t<std::decay_t<Type>>> &&
-				                 std::is_copy_constructible_v<MaybeHash> &&
-				                 std::is_move_constructible_v<MaybeHash>) ||
-		                 std::is_same_v<typename std::hash<Type>, MaybeHash>;
+		concept IsHash = 
+		std::is_same_v<typename std::hash<Type>, MaybeHash> ||
+		(
+			std::negation_v<std::is_same<HashResult, bool>> &&
+			std::is_invocable_r_v<std::size_t, MaybeHash, std::add_const_t<std::decay_t<Type>>> &&
+			std::is_copy_constructible_v<MaybeHash> &&
+			std::is_move_constructible_v<MaybeHash>
+		);
 
 		template<typename Type, typename MaybeHash, typename HashResult = std::size_t>
 		static inline constexpr bool is_hash_v{IsHash<Type, MaybeHash, HashResult> ? true : false};
@@ -47,15 +69,6 @@ namespace containers {
 
 	namespace pmr {
 		    
-		static inline constexpr std::size_t BITS_PER_BYTE {static_cast<std::size_t>(CHAR_BIT)}; //8ull;
-
-    	static inline constexpr auto minimumBitCount (std::unsigned_integral auto value) {
-        	return ((sizeof(value) * BITS_PER_BYTE) - std::countl_zero(value));
-    	}
-	    static inline constexpr auto minimumPowerOfTwo (std::unsigned_integral auto value) {
-    	    return (1ull << minimumBitCount(value - 1));
-    	}
-
 		template <std::size_t Alignment>
 		class AlignedMemoryResource final : public std::pmr::memory_resource {
 		public:
@@ -85,7 +98,8 @@ namespace containers {
 			std::pmr::memory_resource* upstream_resource;
 		};
 
-		static inline std::pmr::synchronized_pool_resource resource(std::pmr::get_default_resource());
+		// static inline std::pmr::synchronized_pool_resource resource(std::pmr::get_default_resource());
+		static inline std::pmr::unsynchronized_pool_resource resource(std::pmr::get_default_resource());
 		// using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
 		// usage example
 		// std::pmr::list<int> l(pmr::allocator_type{&pmr::resource});
@@ -93,7 +107,7 @@ namespace containers {
 		template<typename T = std::byte>
 		using allocator_type = std::pmr::polymorphic_allocator<T>;
 		template<typename T>
-		inline AlignedMemoryResource<minimumPowerOfTwo(sizeof(T))> aligned_resource{&resource};
+		inline AlignedMemoryResource<std::bit_ceil(sizeof(T))> aligned_resource{&resource};
 		// std::pmr::list<int> l(pmr::allocator_type<T>{&pmr::aligned_resource<T>});
 
 
@@ -108,9 +122,51 @@ namespace containers {
 				constexpr inline std::size_t initial_capacity {1<<5};
 				constexpr inline std::size_t max_type_sizeof {1<<10};
 				constexpr inline double maxLoadFactor {0.5};
+				constexpr inline double minLoadFactor {0.125};
 				constexpr inline int maxEmplaceAttempts {5};
 
 			}//!namespace details::const_values
+
+			class CapacityPolicy {
+			public:
+
+				explicit CapacityPolicy(std::size_t requested, std::size_t typeSize)
+					: capacity_ {computeInitial(requested, typeSize)}
+					, mask_ {capacity_ - 1}
+				{}
+
+				std::size_t capacity() const { return capacity_; }
+				std::size_t mask() const { return mask_; }
+
+				void grow() noexcept {
+					capacity_ <<= 1;
+					mask_ = capacity_ - 1;
+				}
+				
+				void setCapacity(std::size_t newCapacity) noexcept {
+					capacity_ = newCapacity;
+					mask_ = capacity_ - 1;
+				}
+
+				static constexpr bool isPowerOfTwo(std::size_t value) {
+					return value != 0 && (value & (value - 1)) == 0;
+				}
+			private:
+				std::size_t capacity_;
+				std::size_t mask_;
+
+			private:
+				static constexpr std::size_t computeInitial(std::size_t requested, std::size_t typeSize) {
+					if (typeSize > const_values::max_type_sizeof) {
+						return 1ull;
+					}
+					if (requested == 0) {
+						return const_values::initial_capacity;
+					}
+					return std::bit_ceil(requested);
+				}
+
+			};
 
 			namespace requirements {
 
@@ -208,29 +264,23 @@ namespace containers {
 
 				template <std::input_iterator IterType>
 				struct Element final {
+					enum class State : std::uint8_t { Free = 0, Occupied, Deleted };
 
-					struct Deleted{};
-
-					std::variant<std::monostate, IterType, Deleted> value_;
+					State state_ {State::Free};
+					IterType iter_ {};
 
 					Element () = default;
+					Element (IterType data_) : state_ {State::Occupied}, iter_ {data_} {}
 
-					Element (IterType data_) { emplace(data_); }
+					bool is_free() const noexcept { return state_ == State::Free; }
+					bool has_value() const noexcept { return state_ == State::Occupied; }
+					bool is_deleted() const noexcept { return state_ == State::Deleted; }
 
-					constexpr bool is_free() const { return std::holds_alternative<std::monostate>(value_); }
+					IterType& value() noexcept { return iter_; }
+					IterType const& value() const noexcept { return iter_; }
 
-					constexpr bool has_value() const { return std::holds_alternative<IterType>(value_); }
-
-					constexpr bool is_deleted() const { return std::holds_alternative<Deleted>(value_); }
-
-					IterType& value() { return std::get<IterType>(value_); }
-
-					IterType const& value() const { return std::get<IterType>(value_); }
-
-					void emplace(IterType data_) { value_.template emplace<IterType>(data_); }
-
-					void reset() { value_.template emplace<Deleted>(Deleted{}); }
-
+					void emplace(IterType data_) noexcept { iter_ = data_; state_ = State::Occupied; }
+					void reset() noexcept { state_ = State::Deleted; }
 				};
 
 				struct Access final {
@@ -240,8 +290,9 @@ namespace containers {
 
 					std::pmr::memory_resource* memResourcePtr;
 					Data &data;
+					Data deadNodes;
 					AccessHelper accessHelper;
-					std::size_t capacity;
+					CapacityPolicy capacityPolicy;
 					std::size_t sz;
 					std::size_t deleted_count;
 
@@ -252,57 +303,65 @@ namespace containers {
 					explicit Access(Data &data, std::pmr::memory_resource* res)
 						: memResourcePtr(res)
 						, data(data)
-						, capacity {sizeof(T) > const_values::max_type_sizeof ? 1 : const_values::initial_capacity}
+						, deadNodes(pmr::allocator_type<T>{res})
+						, capacityPolicy {0, sizeof(T)}
 						, sz {0}
 						, deleted_count{0}
 					{
-						accessHelper.resize(capacity);
+						accessHelper.resize(capacityPolicy.capacity());
 					}
 
 					explicit Access(Data &data, std::size_t initialCapacity, std::pmr::memory_resource* res)
 						: memResourcePtr(res)
 						, data(data)
-						, capacity 
-							{initialCapacity == 0 ? 
-								sizeof(T) > const_values::max_type_sizeof ? 
-									1 : 
-									const_values::initial_capacity : 
-								initialCapacity
-							}
+						, deadNodes(pmr::allocator_type<T>{res})
+						, capacityPolicy {initialCapacity, sizeof(T)}
 						, sz {0}
 						, deleted_count{0}
 					{
-						accessHelper.resize(capacity);
+						accessHelper.resize(capacityPolicy.capacity());
 					}
 
 					AccessIter getElemIter(key_type const &key) {
-						std::size_t h {hasher(key) % capacity};
-						std::size_t const step {h | 1};
-
-						for (std::size_t i = 0; i != capacity; ++i) {
-							if (accessHelper[h].is_free() ||
-								(accessHelper[h].has_value() && equal(keyExtractor(*(accessHelper[h].value())), key)))
-							{
-								return accessHelper.begin() + h;
-							}
-							h = (h + step) % capacity;
+						std::size_t const 
+							cap{capacityPolicy.capacity()},
+							mask {capacityPolicy.mask()};
+					    std::size_t h {hasher(key) & mask};
+					    std::size_t const step {h | 1};
+					
+					    auto check = [&](std::size_t idx) __attribute__((always_inline)) -> bool {
+					        return accessHelper[idx].is_free() ||
+					               (accessHelper[idx].has_value() && equal(keyExtractor(*(accessHelper[idx].value())), key));
+					    };
+					
+						for (std::size_t i {0}; i != cap; ++i) {
+							if (check(h)) {
+					            return accessHelper.begin() + h;
+					        }
+					        h = (h + step) & mask;
 						}
-						return accessHelper.end();
+					    return accessHelper.end();
 					}
 
 					AccessCIter getElemIter(key_type const &key) const {
-						std::size_t h {hasher(key) % capacity};
-						std::size_t const step {h | 1};
-
-						for (std::size_t i = 0; i != capacity; ++i) {
-							if (accessHelper[h].is_free() ||
-								(accessHelper[h].has_value() && equal(keyExtractor(*(accessHelper[h].value())), key)))
-							{
+						std::size_t const 
+							cap{capacityPolicy.capacity()},
+							mask {capacityPolicy.mask()};
+					    std::size_t h {hasher(key) & mask};
+					    std::size_t const step {h | 1};
+					
+					    auto check = [&](std::size_t idx) __attribute__((always_inline)) -> bool {
+					        return accessHelper[idx].is_free() ||
+					               (accessHelper[idx].has_value() && equal(keyExtractor(*(accessHelper[idx].value())), key));
+					    };
+					
+						for (std::size_t i {0}; i != cap; ++i) {
+							if (check(h)) {
 								return accessHelper.cbegin() + h;
 							}
-							h = (h + step) % capacity;
+					        h = (h + step) & mask;
 						}
-						return accessHelper.cend();
+					    return accessHelper.cend();
 					}
 
 					iterator find(key_type const &key) {
@@ -332,9 +391,9 @@ namespace containers {
 						    return std::prev(data.end());
 						};
 
-						double const currLoadFactor {1.0 * (sz + deleted_count) / capacity};
+						double const currLoadFactor {1.0 * (sz + deleted_count) / capacityPolicy.capacity()};
 						if (currLoadFactor > const_values::maxLoadFactor) {
-							rehash();
+							rehashTo(capacityPolicy.capacity() << 1);
 						}
 						key_type const& key {keyExtractor(mappedValue)};
 						AccessIter elemIter {getElemIter(key)};
@@ -348,7 +407,7 @@ namespace containers {
 						else {
 							int attempts {const_values::maxEmplaceAttempts};
 							while (attempts-- && !emplaceable(elemIter)){
-								rehash();
+								rehashTo(capacityPolicy.capacity() << 1);
 								elemIter = getElemIter(key);
 							}
 							if (!emplaceable(elemIter)) {
@@ -358,27 +417,28 @@ namespace containers {
 							return {elemIter->value(), true};
 						}
 					}
-
+#if 0
 					void erase(key_type const &key) {
 						AccessIter elemIter {getElemIter(key)};
 						if (!contains(elemIter)) {
 							return;
 						}
 
+						std::size_t const mask 		{capacityPolicy.mask()};
 						std::size_t idx_curr        {static_cast<std::size_t>(elemIter - accessHelper.begin())};
 						std::size_t hash_curr       {hasher(key)};
-						std::size_t const step      {(hash_curr % capacity) | 1};
-						std::size_t	idx_next        {(idx_curr + step) % capacity};
+						std::size_t const step      {(hash_curr & mask) | 1};
+						std::size_t	idx_next        {(idx_curr + step) & mask};
 
 						//we shouldn't perform more iterations, then capacity we have
-						for (std::size_t count = 0; count != capacity; ++count){
+						for (std::size_t count {0}; count != capacityPolicy.capacity(); ++count){
 							//should remove, next elem is free, we are at the end of hash sequence
 							if (accessHelper[idx_next].is_free()){
 								break;
 							}
 							//should skip because next element was deleted before
 							else if (accessHelper[idx_next].is_deleted()) {
-								idx_next = (idx_next + step) % capacity;
+								idx_next = (idx_next + step) & mask;
 								continue;
 							}
 							//at this point we know that both values are presented
@@ -387,7 +447,7 @@ namespace containers {
 
 							//should skip as it is collision of placement, hashes are different (ie 18 and 9)
 							if (hash_next != hash_curr) {
-								idx_next = (idx_next + step) % capacity;
+								idx_next = (idx_next + step) & mask;
 								continue;
 							}
 							//else finally we should swap
@@ -398,39 +458,69 @@ namespace containers {
 								hash_curr = hash_next;
 								idx_curr = idx_next;
 
-								idx_next = (idx_curr + step) % capacity;
+								idx_next = (idx_curr + step) & mask;
 							}
 						}
 
 						//deleting element at the end of hash sequence
-						data.erase(accessHelper[idx_curr].value());
+						// data.erase(accessHelper[idx_curr].value());
+						deadNodes.splice(deadNodes.end(), data, accessHelper[idx_curr].value());
 						accessHelper[idx_curr].reset();
 						--sz;
 						++deleted_count;
+						tryShrink();
 					}
+#else
+					void erase(key_type const &key) {
+						AccessIter elemIter {getElemIter(key)};
+						if (!contains(elemIter)) {
+							return;
+						}
+						deadNodes.splice(deadNodes.end(), data, elemIter->value());
+						// data.erase(elemIter->value());
+						elemIter->reset();
+						--sz;
+						++deleted_count;
+						tryShrink();
+					}
+#endif
 
 					void erase(const_iterator cIter){
-						auto const& key {keyExtractor(*cIter)};
+						key_type const& key {keyExtractor(*cIter)};
 						erase(key);
 					}
 
-					void rehash() {
-						std::size_t new_capacity {capacity * 2u};
-						AccessHelper newAccessHelper(new_capacity);
 
-						for (auto &entry : accessHelper) {
+					void tryShrink() {
+						std::size_t targetCapacity {capacityPolicy.capacity()};
+						while (targetCapacity > const_values::initial_capacity && 1.0 * sz / (targetCapacity >> 1) <= const_values::maxLoadFactor) 
+						{
+							targetCapacity >>= 1;
+						}
+						if (targetCapacity < capacityPolicy.capacity()) {
+							rehashTo(targetCapacity);
+						}
+					}
+
+					void rehashTo(std::size_t newCapacity) {
+
+						capacityPolicy.setCapacity(newCapacity);
+						std::size_t const newMask {capacityPolicy.mask()};
+						AccessHelper newAccessHelper(newCapacity);
+
+						for (Element<iterator> &entry : accessHelper) {
 							if (entry.has_value()) {
-								std::size_t h {hasher(keyExtractor(*(entry.value()))) % new_capacity};
+								std::size_t h {hasher(keyExtractor(*(entry.value()))) & newMask};
 								std::size_t const step {h | 1};
 								bool entryUpdated {false};
 
-								for (std::size_t i = 0; i != new_capacity; ++i) {
+								for (std::size_t i {0}; i != newCapacity; ++i) {
 									if (newAccessHelper[h].is_free()) {
 										newAccessHelper[h] = entry;
 										entryUpdated = true;
 										break;
 									}
-									h = (h + step) % new_capacity;
+									h = (h + step) & newMask;
 								}
 								if (!entryUpdated) {
 									throw std::runtime_error("Failed to update element while rehashing");
@@ -438,8 +528,8 @@ namespace containers {
 							}
 						}
 						std::swap(accessHelper, newAccessHelper);
-						std::swap(capacity, new_capacity);
 						deleted_count = 0;
+						deadNodes.clear();
 					}
 
 					bool contains(AccessCIter iter) const {
@@ -449,6 +539,10 @@ namespace containers {
 					bool contains(key_type const& key) const {
 						AccessCIter iter {getElemIter(key)};
 						return contains(iter);
+					}
+
+					std::size_t bytesAllocated() const {
+						return accessHelper.capacity() * sizeof(typename AccessHelper::value_type);
 					}
 				};
 
@@ -474,10 +568,9 @@ namespace containers {
 				    // : data(pmr::allocator_type{&pmr::resource})
 					: memResourcePtr (other.memResourcePtr)
 					, data(pmr::allocator_type<T>{memResourcePtr})
-				    , access(data, other.access.capacity, memResourcePtr)
+				    , access(data, other.access.capacityPolicy.capacity(), memResourcePtr)
 				{
-					for (auto const& item : other.data){
-    					// data.emplace_back(item);
+					for (T const& item : other.data){
 					    data.emplace_back(
 					        std::make_obj_using_allocator<T>(
 					            pmr::allocator_type<T>{memResourcePtr},
@@ -489,8 +582,8 @@ namespace containers {
 				    std::unordered_map<T const*, iterator> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
-					auto oldIt {other.data.cbegin()};
-				    auto newIt {data.begin()};
+					const_iterator oldIt {other.data.cbegin()};
+				    iterator newIt {data.begin()};
 				    for (; oldIt != other.data.cend(); ++oldIt, ++newIt) {
 				        iterMap[std::addressof(*oldIt)] = newIt;
 					}
@@ -498,8 +591,8 @@ namespace containers {
 				    access.sz            = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				
-				    for (std::size_t i = 0; i < other.access.capacity; ++i) {
-				        auto const& elem {other.access.accessHelper[i]};
+				    for (std::size_t i {0}; i < other.access.capacityPolicy.capacity(); ++i) {
+				        Element<iterator> const& elem {other.access.accessHelper[i]};
 				        if (elem.has_value()) {
 				            access.accessHelper[i].emplace(iterMap.at(std::addressof(*elem.value())));
 						}
@@ -515,8 +608,7 @@ namespace containers {
 					}
 
 					data.clear();
-					for (auto const& item : other.data) {
-						// data.emplace_back(item);
+					for (T const& item : other.data) {
 					    data.emplace_back(
 					        std::make_obj_using_allocator<T>(
 					            pmr::allocator_type<T>{memResourcePtr},
@@ -525,22 +617,22 @@ namespace containers {
 					    );
 					}
 				
-				    access.accessHelper.assign(other.access.capacity, {});
-				    access.capacity      = other.access.capacity;
+				    access.accessHelper.assign(other.access.capacityPolicy.capacity(), {});
+				    access.capacityPolicy = other.access.capacityPolicy;
 				    access.sz            = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				
 				    std::unordered_map<T const*, iterator> iterMap;
 				    iterMap.reserve(other.access.sz);
 				
-					auto oldIt {other.data.cbegin()};
-				    auto newIt {data.begin()};
+					const_iterator oldIt {other.data.cbegin()};
+				    iterator newIt {data.begin()};
 				    for (; oldIt != other.data.cend(); ++oldIt, ++newIt) {
 				        iterMap[std::addressof(*oldIt)] = newIt;
 					}
 				
-				    for (std::size_t i = 0; i < other.access.capacity; ++i) {
-				        auto const& elem {other.access.accessHelper[i]};
+				    for (std::size_t i {0}; i < other.access.capacityPolicy.capacity(); ++i) {
+				        Element<iterator> const& elem {other.access.accessHelper[i]};
 				        if (elem.has_value()) {
 				            access.accessHelper[i].emplace(iterMap.at(std::addressof(*elem.value())));
 						}
@@ -559,8 +651,9 @@ namespace containers {
 				    , access(data, 0, memResourcePtr)
 				{
 				    data.splice(data.end(), other.data);
+					access.deadNodes.clear();
 				    access.accessHelper = std::move(other.access.accessHelper);
-					access.capacity     = other.access.capacity;
+				    access.capacityPolicy = other.access.capacityPolicy;
 				    access.sz = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				}
@@ -572,8 +665,9 @@ namespace containers {
 				    }
 				    data.clear();
 				    data.splice(data.end(), other.data);
+					access.deadNodes.clear();					
 				    access.accessHelper = std::move(other.access.accessHelper);
-				    access.capacity = other.access.capacity;
+				    access.capacityPolicy = other.access.capacityPolicy;
 				    access.sz = other.access.sz;
 				    access.deleted_count = other.access.deleted_count;
 				    return *this;
@@ -603,7 +697,7 @@ namespace containers {
 				bool contains(key_type const &key) const{ return access.contains(key); }
 
 				const_iterator at(key_type const& key) const {
-					auto found = find(key);
+					const_iterator found {find(key)};
 					if (found == this->cend()) {
 						throw std::out_of_range("Hash table, method at() gets non-existent key");
 					}
@@ -612,7 +706,11 @@ namespace containers {
 
 				std::size_t size() const{ return access.sz; }
 
+				std::size_t capacity() const { return access.capacityPolicy.capacity(); }
+
 				bool empty() const{ return access.sz == 0u; }
+
+				std::size_t bytesAllocated() const { return access.bytesAllocated(); }
 
 				iterator begin() requires requirements::IsMapConcept<type> { return data.begin(); }
 
@@ -694,7 +792,7 @@ namespace containers {
 			Value& operator[](Key const& key)
 			requires std::default_initializable<Value>
 			{
-				auto found = this->find(key);
+				iterator found {this->find(key)};
 				if (found != this->end()) {
 					return const_cast<Value&>(found->second);
 				}
