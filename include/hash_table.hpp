@@ -4,25 +4,6 @@
 
 #pragma once
 
-#if defined(__clang__) || defined(__GNUC__)
-/*
-locality:
-0 non-temporal — fetch once, evict immediately after use, bypasses cache hierarchy
-1 L3/low reuse
-2 L2/moderate reuse
-3 L1/high reuse — keep it hot
-*/
-    #define PREFETCH(addr, rw, locality) __builtin_prefetch((addr), (rw), (locality))
-#elif defined(_MSC_VER)
-    #include <xmmintrin.h>
-    #define PREFETCH(addr, rw, locality) \
-        _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
-
-#else
-    #define PREFETCH(addr, rw, locality)
-#endif
-
-
 #include <bit>
 #include <climits>
 
